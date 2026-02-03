@@ -1,0 +1,17 @@
+{
+  "name": "openclaw-bridge-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/cli.ts run",
+    "run": "bun run src/cli.ts run",
+    "lint": "bun run src/cli.ts --help",
+    "typecheck": "bun run tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.4.5"
+  }
+}
