@@ -29,6 +29,7 @@
     "@babel/runtime": "^7.28.6",
     "@tarojs/cli": "^4.1.11",
     "@tarojs/webpack5-runner": "^4.1.11",
+    "@types/react": "^19.2.10",
     "babel-preset-taro": "^4.1.11",
     "typescript": "^5.9.3"
   }

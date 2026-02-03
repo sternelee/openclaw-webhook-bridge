@@ -1,122 +1,122 @@
-import { Component } from 'react'
-import { View, Text, Input, Button, Switch } from '@tarojs/components'
-import Taro from '@tarojs/taro'
-import { observer, inject } from 'mobx-react'
-import './index.scss'
+import { Component } from "react";
+import { View, Text, Input, Button, Switch } from "@tarojs/components";
+import Taro from "@tarojs/taro";
+import { observer, inject } from "mobx-react";
+import "./index.scss";
 
 interface SettingsProps {
-  chatStore?: any
-  counterStore?: any
+  chatStore?: any;
+  counterStore?: any;
 }
 
-@inject('chatStore', 'counterStore')
+@inject("chatStore", "counterStore")
 @observer
 class Settings extends Component<SettingsProps> {
-  private wsUrlInput: string = ''
-  private sessionIdInput: string = ''
+  private wsUrlInput: string = "";
+  private sessionIdInput: string = "";
 
   componentDidMount() {
-    const { chatStore } = this.props
+    const { chatStore } = this.props;
     if (chatStore) {
-      this.wsUrlInput = chatStore.wsUrl || ''
-      this.sessionIdInput = chatStore.sessionId || ''
+      this.wsUrlInput = chatStore.wsUrl || "";
+      this.sessionIdInput = chatStore.sessionId || "";
     }
   }
 
   handleWsUrlChange = (e: any) => {
-    this.wsUrlInput = e.detail.value
-  }
+    this.wsUrlInput = e.detail.value;
+  };
 
   handleSessionIdChange = (e: any) => {
-    this.sessionIdInput = e.detail.value
-  }
+    this.sessionIdInput = e.detail.value;
+  };
 
   handleSaveSettings = async () => {
-    const { chatStore } = this.props
+    const { chatStore } = this.props;
 
     try {
-      chatStore.setWsUrl(this.wsUrlInput.trim())
-      chatStore.setSessionId(this.sessionIdInput.trim())
+      chatStore.setWsUrl(this.wsUrlInput.trim());
+      chatStore.setSessionId(this.sessionIdInput.trim());
 
       Taro.showToast({
-        title: '保存成功',
-        icon: 'success'
-      })
+        title: "保存成功",
+        icon: "success",
+      });
     } catch (error) {
       Taro.showToast({
-        title: '保存失败',
-        icon: 'none'
-      })
+        title: "保存失败",
+        icon: "none",
+      });
     }
-  }
+  };
 
   handleConnect = async () => {
-    const { chatStore } = this.props
+    const { chatStore } = this.props;
 
     if (!this.wsUrlInput || !this.wsUrlInput.trim()) {
       Taro.showToast({
-        title: '请输入 WebSocket 地址',
-        icon: 'none'
-      })
-      return
+        title: "请输入 WebSocket 地址",
+        icon: "none",
+      });
+      return;
     }
 
     try {
-      Taro.showLoading({ title: '连接中...' })
-      chatStore.setWsUrl(this.wsUrlInput.trim())
-      await chatStore.connect()
-      Taro.hideLoading()
+      Taro.showLoading({ title: "连接中..." });
+      chatStore.setWsUrl(this.wsUrlInput.trim());
+      await chatStore.connect();
+      Taro.hideLoading();
       Taro.showToast({
-        title: '连接成功',
-        icon: 'success'
-      })
+        title: "连接成功",
+        icon: "success",
+      });
     } catch (error: any) {
-      Taro.hideLoading()
+      Taro.hideLoading();
       Taro.showToast({
-        title: error.message || '连接失败',
-        icon: 'none'
-      })
+        title: error.message || "连接失败",
+        icon: "none",
+      });
     }
-  }
+  };
 
   handleDisconnect = () => {
-    const { chatStore } = this.props
-    chatStore.disconnect()
+    const { chatStore } = this.props;
+    chatStore.disconnect();
     Taro.showToast({
-      title: '已断开连接',
-      icon: 'success'
-    })
-  }
+      title: "已断开连接",
+      icon: "success",
+    });
+  };
 
   handleClearMessages = () => {
-    const { chatStore } = this.props
+    const { chatStore } = this.props;
     Taro.showModal({
-      title: '确认',
-      content: '确定要清空所有聊天记录吗？',
+      title: "确认",
+      content: "确定要清空所有聊天记录吗？",
       success: (res) => {
         if (res.confirm) {
-          chatStore.clearMessages()
+          chatStore.clearMessages();
           Taro.showToast({
-            title: '已清空',
-            icon: 'success'
-          })
+            title: "已清空",
+            icon: "success",
+          });
         }
-      }
-    })
-  }
+      },
+    });
+  };
 
   handleAbout = () => {
     Taro.showModal({
-      title: '关于 OpenClaw',
-      content: 'OpenClaw 是一个 AI 助手微信小程序\n\n版本: 1.0.0',
-      showCancel: false
-    })
-  }
+      title: "关于 OpenClaw",
+      content: "OpenClaw 是一个 AI 助手微信小程序\n\n版本: 1.0.0",
+      showCancel: false,
+    });
+  };
 
   render() {
-    const { chatStore, counterStore } = this.props
-    const { connected, wsUrl, sessionId, messages } = chatStore || {}
-    const { count } = counterStore || {}
+    const { chatStore, counterStore } = this.props;
+    const { connected, wsUrl, sessionId, messages } = chatStore || {};
+    const { count } = counterStore || {};
 
     return (
       <View className="settings-page">
@@ -124,10 +124,12 @@ class Settings extends Component<SettingsProps> {
           <View className="settings-section">
             <Text className="section-title">连接状态</Text>
             <View className="status-card">
-              <View className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
+              <View
+                className={`status-indicator ${connected ? "connected" : "disconnected"}`}
+              >
                 <Text className="status-dot"></Text>
                 <Text className="status-label">
-                  {connected ? '已连接' : '未连接'}
+                  {connected ? "已连接" : "未连接"}
                 </Text>
               </View>
             </View>
@@ -156,15 +158,24 @@ class Settings extends Component<SettingsProps> {
               />
             </View>
             <View className="button-group">
-              <Button className="action-btn primary" onClick={this.handleSaveSettings}>
+              <Button
+                className="action-btn primary"
+                onClick={this.handleSaveSettings}
+              >
                 保存配置
               </Button>
               {connected ? (
-                <Button className="action-btn danger" onClick={this.handleDisconnect}>
+                <Button
+                  className="action-btn danger"
+                  onClick={this.handleDisconnect}
+                >
                   断开连接
                 </Button>
               ) : (
-                <Button className="action-btn success" onClick={this.handleConnect}>
+                <Button
+                  className="action-btn success"
+                  onClick={this.handleConnect}
+                >
                   连接服务器
                 </Button>
               )}
@@ -192,10 +203,16 @@ class Settings extends Component<SettingsProps> {
               <Text className="info-value">{count}</Text>
             </View>
             <View className="button-row">
-              <Button className="mini-btn" onClick={() => counterStore.increment()}>
+              <Button
+                className="mini-btn"
+                onClick={() => counterStore.increment()}
+              >
                 +1
               </Button>
-              <Button className="mini-btn" onClick={() => counterStore.decrement()}>
+              <Button
+                className="mini-btn"
+                onClick={() => counterStore.decrement()}
+              >
                 -1
               </Button>
               <Button className="mini-btn" onClick={() => counterStore.reset()}>
@@ -208,8 +225,8 @@ class Settings extends Component<SettingsProps> {
           </View>
         </View>
       </View>
-    )
+    );
   }
 }
 
-export default Settings
+export default Settings;

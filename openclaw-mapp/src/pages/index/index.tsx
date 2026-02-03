@@ -1,33 +1,33 @@
-import { Component } from 'react'
-import { View, Text, Button } from '@tarojs/components'
-import { observer, inject } from 'mobx-react'
-import './index.scss'
+import { Component } from "react";
+import { View, Text, Button } from "@tarojs/components";
+import { observer, inject } from "mobx-react";
+import "./index.scss";
 
 interface IndexProps {
-  counterStore?: any
+  counterStore?: any;
 }
 
-@inject('counterStore')
+@inject("counterStore")
 @observer
 class Index extends Component<IndexProps> {
   handleClick = () => {
-    const { counterStore } = this.props
-    counterStore.increment()
-  }
+    const { counterStore } = this.props;
+    counterStore.increment();
+  };
 
   handleDecrement = () => {
-    const { counterStore } = this.props
-    counterStore.decrement()
-  }
+    const { counterStore } = this.props;
+    counterStore.decrement();
+  };
 
   handleReset = () => {
-    const { counterStore } = this.props
-    counterStore.reset()
-  }
+    const { counterStore } = this.props;
+    counterStore.reset();
+  };
 
   render() {
-    const { counterStore } = this.props
-    const { count } = counterStore || {}
+    const { counterStore } = this.props;
+    const { count } = counterStore || {};
 
     return (
       <View className="index-page">
@@ -74,8 +74,8 @@ class Index extends Component<IndexProps> {
           </View>
         </View>
       </View>
-    )
+    );
   }
 }
 
-export default Index
+export default Index;

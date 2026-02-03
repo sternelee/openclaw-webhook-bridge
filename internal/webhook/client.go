@@ -45,6 +45,11 @@ func NewClient(url string, handler MessageHandler, uid string) *Client {
 
 // Connect establishes a WebSocket connection to the webhook server
 func (c *Client) Connect(ctx context.Context) error {
+	// Validate UID is required
+	if c.uid == "" {
+		return fmt.Errorf("UID is required for connection. Please configure a unique UID for this bridge instance")
+	}
+
 	c.ctx, c.cancel = context.WithCancel(ctx)
 
 	// Start connection loop
@@ -54,7 +59,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	// Wait for connection to be established
 	for i := 0; i < 50; i++ {
 		if c.connected.Load() {
-			log.Printf("[Webhook] Connected to %s", c.url)
+			log.Printf("[Webhook] Connected to %s (UID: %s)", c.url, c.uid)
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)

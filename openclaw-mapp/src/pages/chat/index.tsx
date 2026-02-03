@@ -1,136 +1,137 @@
-import { Component } from 'react'
-import { View, Text, Input, Button, ScrollView } from '@tarojs/components'
-import Taro from '@tarojs/taro'
-import { observer, inject } from 'mobx-react'
-import { ChatMessage } from '../../types/openclaw'
-import './index.scss'
+import { Component } from "react";
+import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
+import Taro from "@tarojs/taro";
+import { observer, inject } from "mobx-react";
+import { ChatMessage } from "../../types/openclaw";
+import "./index.scss";
 
 interface ChatProps {
-  chatStore?: any
+  chatStore?: any;
 }
 
-@inject('chatStore')
+@inject("chatStore")
 @observer
 class Chat extends Component<ChatProps> {
-  private inputContent: string = ''
-  private scrollViewRef: any = null
+  private inputContent: string = "";
+  private scrollViewRef: any = null;
 
   componentDidMount() {
-    this.checkConnection()
+    this.checkConnection();
   }
 
   componentDidShow() {
-    this.scrollToBottom()
+    this.scrollToBottom();
   }
 
   checkConnection() {
-    const { chatStore } = this.props
+    const { chatStore } = this.props;
     if (!chatStore?.wsUrl) {
       Taro.showModal({
-        title: '提示',
-        content: '您还未配置服务器地址，是否前往设置？',
+        title: "提示",
+        content: "您还未配置服务器地址，是否前往设置？",
         success: (res) => {
           if (res.confirm) {
             Taro.switchTab({
-              url: '/pages/welcome/index'
-            })
+              url: "/pages/welcome/index",
+            });
           }
-        }
-      })
+        },
+      });
     } else if (!chatStore?.connected) {
-      this.tryConnect()
+      this.tryConnect();
     }
   }
 
   async tryConnect() {
-    const { chatStore } = this.props
+    const { chatStore } = this.props;
     try {
-      await chatStore.connect()
+      await chatStore.connect();
     } catch (error) {
-      console.error('Auto-connect failed:', error)
+      console.error("Auto-connect failed:", error);
     }
   }
 
   handleInputChange = (e: any) => {
-    this.inputContent = e.detail.value
-  }
+    this.inputContent = e.detail.value;
+  };
 
   handleSend = async () => {
-    const { chatStore } = this.props
+    const { chatStore } = this.props;
 
     if (!this.inputContent || !this.inputContent.trim()) {
-      return
+      return;
     }
 
     if (!chatStore?.connected) {
       Taro.showToast({
-        title: '未连接到服务器',
-        icon: 'none'
-      })
-      return
+        title: "未连接到服务器",
+        icon: "none",
+      });
+      return;
     }
 
-    const content = this.inputContent.trim()
-    this.inputContent = ''
-    this.forceUpdate()
+    const content = this.inputContent.trim();
+    this.inputContent = "";
+    this.forceUpdate();
 
     try {
-      await chatStore.sendMessage(content)
-      this.scrollToBottom()
+      await chatStore.sendMessage(content);
+      this.scrollToBottom();
     } catch (error: any) {
       Taro.showToast({
-        title: error.message || '发送失败',
-        icon: 'none'
-      })
+        title: error.message || "发送失败",
+        icon: "none",
+      });
     }
-  }
+  };
 
   scrollToBottom = () => {
     setTimeout(() => {
-      const query = Taro.createSelectorQuery()
-      query.select('.messages-container').boundingClientRect()
+      const query = Taro.createSelectorQuery();
+      query.select(".messages-container").boundingClientRect();
       query.exec((res) => {
         if (res[0]) {
           this.scrollViewRef?.scrollTo({
             top: res[0].height,
-            duration: 300
-          })
+            duration: 300,
+          });
         }
-      })
-    }, 100)
-  }
+      });
+    }, 100);
+  };
 
   handleClearHistory = () => {
-    const { chatStore } = this.props
+    const { chatStore } = this.props;
     Taro.showModal({
-      title: '确认',
-      content: '确定要清空聊天记录吗？',
+      title: "确认",
+      content: "确定要清空聊天记录吗？",
       success: (res) => {
         if (res.confirm) {
-          chatStore.clearMessages()
+          chatStore.clearMessages();
           Taro.showToast({
-            title: '已清空',
-            icon: 'success'
-          })
+            title: "已清空",
+            icon: "success",
+          });
         }
-      }
-    })
-  }
+      },
+    });
+  };
 
   renderMessage = (message: ChatMessage) => {
-    const isUser = message.role === 'user'
-    const isError = message.status === 'error'
+    const isUser = message.role === "user";
+    const isError = message.status === "error";
 
     return (
-      <View key={message.id} className={`message-item ${isUser ? 'user' : 'assistant'}`}>
+      <View
+        key={message.id}
+        className={`message-item ${isUser ? "user" : "assistant"}`}
+      >
         <View className="message-bubble">
-          {message.status === 'sending' && (
+          {message.status === "sending" && (
             <Text className="message-status">发送中...</Text>
           )}
-          {isError && (
-            <Text className="message-status error">发送失败</Text>
-          )}
-          <Text className={`message-content ${isError ? 'error' : ''}`}>
+          {isError && <Text className="message-status error">发送失败</Text>}
+          <Text className={`message-content ${isError ? "error" : ""}`}>
             {message.content}
           </Text>
           <Text className="message-time">
@@ -138,21 +139,23 @@ class Chat extends Component<ChatProps> {
           </Text>
         </View>
       </View>
-    )
-  }
+    );
+  };
 
   render() {
-    const { chatStore } = this.props
-    const { messages, connected, connecting } = chatStore || {}
+    const { chatStore } = this.props;
+    const { messages, connected, connecting } = chatStore || {};
 
     return (
       <View className="chat-page">
         <View className="chat-header">
           <Text className="header-title">OpenClaw Chat</Text>
           <View className="header-actions">
-            <View className={`status-badge ${connected ? 'connected' : 'disconnected'}`}>
+            <View
+              className={`status-badge ${connected ? "connected" : "disconnected"}`}
+            >
               <Text className="status-text">
-                {connecting ? '连接中...' : (connected ? '已连接' : '未连接')}
+                {connecting ? "连接中..." : connected ? "已连接" : "未连接"}
               </Text>
             </View>
             <Button
@@ -169,11 +172,13 @@ class Chat extends Component<ChatProps> {
           className="messages-container"
           scrollY
           scrollIntoView="bottom"
-          ref={(ref: any) => { this.scrollViewRef = ref }}
+          ref={(ref: any) => {
+            this.scrollViewRef = ref;
+          }}
         >
           <View className="messages-list">
             {messages && messages.length > 0 ? (
-              messages.map(msg => this.renderMessage(msg))
+              messages.map((msg) => this.renderMessage(msg))
             ) : (
               <View className="empty-state">
                 <Text className="empty-text">暂无消息</Text>
@@ -195,7 +200,7 @@ class Chat extends Component<ChatProps> {
             confirmType="send"
           />
           <Button
-            className={`send-btn ${!this.inputContent?.trim() || !connected ? 'disabled' : ''}`}
+            className={`send-btn ${!this.inputContent?.trim() || !connected ? "disabled" : ""}`}
             size="mini"
             onClick={this.handleSend}
             disabled={!this.inputContent?.trim() || !connected}
@@ -204,8 +209,8 @@ class Chat extends Component<ChatProps> {
           </Button>
         </View>
       </View>
-    )
+    );
   }
 }
 
-export default Chat
+export default Chat;

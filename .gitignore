@@ -41,3 +41,4 @@ config.yaml
 node_modules/
 .wrangler
 openclaw-bridge
+dist

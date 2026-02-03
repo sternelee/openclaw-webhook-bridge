@@ -1,7 +1,4 @@
-import chatStore from './chatStore'
-import counterStore from './counter'
+import chatStore from "./chatStore";
+import counterStore from "./counter";
 
-export {
-  chatStore,
-  counterStore
-}
+export { chatStore, counterStore };

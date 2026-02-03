@@ -1,22 +1,22 @@
-import { observable, action } from 'mobx'
+import { observable, action } from "mobx";
 
 class CounterStore {
-  @observable count = 0
+  @observable count = 0;
 
   @action
   increment = () => {
-    this.count += 1
-  }
+    this.count += 1;
+  };
 
   @action
   decrement = () => {
-    this.count -= 1
-  }
+    this.count -= 1;
+  };
 
   @action
   reset = () => {
-    this.count = 0
-  }
+    this.count = 0;
+  };
 }
 
-export default new CounterStore()
+export default new CounterStore();

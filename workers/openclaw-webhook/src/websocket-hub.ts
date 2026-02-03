@@ -31,12 +31,14 @@ export class WebSocketHub {
     for (const ws of websockets) {
       // After hibernation, we lose UID mapping since it's stored in memory
       // Re-connect without UID - client will need to reconnect with proper UID
-      this.addToConnections(ws, 'hibernated');
+      this.addToConnections(ws, "hibernated");
     }
     // Only log if there are actual connections
     const totalConnections = this.uidByConnection.size;
     if (totalConnections > 0) {
-      console.log(`[WebSocketHub] Awake from hibernation, connections: ${totalConnections}`);
+      console.log(
+        `[WebSocketHub] Awake from hibernation, connections: ${totalConnections}`,
+      );
     }
   }
 
@@ -67,13 +69,13 @@ export class WebSocketHub {
   // Fetch method - main communication layer between Worker and Durable Object
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const upgradeHeader = request.headers.get('Upgrade');
+    const upgradeHeader = request.headers.get("Upgrade");
 
     // Handle WebSocket upgrade
-    if (upgradeHeader === 'websocket') {
+    if (upgradeHeader === "websocket") {
       // Extract UID from query parameter or path
       // Support both: /ws?uid=xxx and /ws/xxx
-      let uid = url.searchParams.get('uid') || '';
+      let uid = url.searchParams.get("uid") || "";
 
       // Also check path pattern /ws/:uid
       const pathMatch = url.pathname.match(/^\/ws\/([^\/]+)$/);
@@ -81,12 +83,24 @@ export class WebSocketHub {
         uid = pathMatch[1];
       }
 
-      // Default UID if none provided (backward compatibility)
+      // UID is now REQUIRED - reject connections without UID
       if (!uid) {
-        uid = 'default';
+        console.error("[WebSocketHub] Rejected connection: UID is required");
+        return new Response(
+          JSON.stringify({
+            error:
+              "UID is required. Connect with /ws?uid=YOUR_UID or /ws/YOUR_UID",
+          }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       }
 
-      console.log(`[WebSocketHub] WebSocket connection request from UID: ${uid}`);
+      console.log(
+        `[WebSocketHub] WebSocket connection request from UID: ${uid}`,
+      );
 
       // Create WebSocket pair
       const websocketPair = new WebSocketPair();
@@ -99,20 +113,22 @@ export class WebSocketHub {
       // Store the SERVER socket (not client) for broadcasting
       // Map it to the UID for routing
       this.addToConnections(server, uid);
-      console.log(`[WebSocketHub] WebSocket accepted for UID=${uid}, total connections: ${this.uidByConnection.size}`);
+      console.log(
+        `[WebSocketHub] WebSocket accepted for UID=${uid}, total connections: ${this.uidByConnection.size}`,
+      );
 
       // Return the client socket to establish the connection
       return new Response(null, {
         status: 101,
-        webSocket: client
+        webSocket: client,
       });
     }
 
     // Handle broadcast API endpoint
     // POST /broadcast with { uid, data } to broadcast to specific UID
-    if (url.pathname === '/broadcast' && request.method === 'POST') {
+    if (url.pathname === "/broadcast" && request.method === "POST") {
       try {
-        const body = await request.json() as Record<string, unknown>;
+        const body = (await request.json()) as Record<string, unknown>;
         const uid = body.uid as string;
         const message = body.data;
 
@@ -121,7 +137,7 @@ export class WebSocketHub {
           return Response.json({
             success: true,
             sentTo: sentCount,
-            uid
+            uid,
           });
         }
 
@@ -130,18 +146,21 @@ export class WebSocketHub {
         this.broadcast(msgStr);
         return Response.json({
           success: true,
-          sentTo: this.uidByConnection.size
+          sentTo: this.uidByConnection.size,
         });
       } catch (error) {
-        return Response.json({
-          success: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        }, { status: 400 });
+        return Response.json(
+          {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          },
+          { status: 400 },
+        );
       }
     }
 
     // Handle stats endpoint
-    if (url.pathname === '/stats') {
+    if (url.pathname === "/stats") {
       // Count connections per UID
       const connectionsByUID: Record<string, number> = {};
       for (const [uid, connections] of this.connectionsByUID.entries()) {
@@ -150,20 +169,20 @@ export class WebSocketHub {
 
       return Response.json({
         activeConnections: this.uidByConnection.size,
-        connectionsByUID
+        connectionsByUID,
       });
     }
 
     // Handle health endpoint
-    if (url.pathname === '/health') {
+    if (url.pathname === "/health") {
       return Response.json({
-        status: 'healthy',
+        status: "healthy",
         timestamp: new Date().toISOString(),
-        activeConnections: this.uidByConnection.size
+        activeConnections: this.uidByConnection.size,
       });
     }
 
-    return new Response('Not found', { status: 404 });
+    return new Response("Not found", { status: 404 });
   }
 
   // WebSocket message handler - called when client sends a message
@@ -172,7 +191,10 @@ export class WebSocketHub {
     try {
       const uid = this.uidByConnection.get(ws);
       const message = JSON.parse(data as string);
-      console.log(`[WebSocketHub] Received from UID=${uid}:`, JSON.stringify(message));
+      console.log(
+        `[WebSocketHub] Received from UID=${uid}:`,
+        JSON.stringify(message),
+      );
 
       // Broadcast to all connected clients with the SAME UID (no echo to sender)
       if (uid) {
@@ -182,16 +204,25 @@ export class WebSocketHub {
         this.broadcastExcept(JSON.stringify(message), ws);
       }
     } catch (error) {
-      console.error('[WebSocketHub] Error processing message:', error);
+      console.error("[WebSocketHub] Error processing message:", error);
     }
   }
 
   // WebSocket close handler - called when connection closes
-  webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
+  webSocketClose(
+    ws: WebSocket,
+    code: number,
+    reason: string,
+    wasClean: boolean,
+  ) {
     const uid = this.uidByConnection.get(ws);
-    console.log(`[WebSocketHub] WebSocket closed: UID=${uid}, code=${code}, reason=${reason}, clean=${wasClean}`);
+    console.log(
+      `[WebSocketHub] WebSocket closed: UID=${uid}, code=${code}, reason=${reason}, clean=${wasClean}`,
+    );
     this.removeFromConnections(ws);
-    console.log(`[WebSocketHub] Remaining connections: ${this.uidByConnection.size}`);
+    console.log(
+      `[WebSocketHub] Remaining connections: ${this.uidByConnection.size}`,
+    );
   }
 
   // WebSocket error handler - called when error occurs
@@ -210,11 +241,13 @@ export class WebSocketHub {
         connection.send(message);
         sentCount++;
       } catch (error) {
-        console.error('[WebSocketHub] Failed to send to connection:', error);
+        console.error("[WebSocketHub] Failed to send to connection:", error);
         // Don't delete here - let webSocketError handle it
       }
     }
-    console.log(`[WebSocketHub] Broadcasted to ${sentCount}/${this.uidByConnection.size} connections`);
+    console.log(
+      `[WebSocketHub] Broadcasted to ${sentCount}/${this.uidByConnection.size} connections`,
+    );
   }
 
   // Broadcast to all clients except one (used to avoid echoing back to sender)
@@ -229,10 +262,12 @@ export class WebSocketHub {
         connection.send(message);
         sentCount++;
       } catch (error) {
-        console.error('[WebSocketHub] Failed to send to connection:', error);
+        console.error("[WebSocketHub] Failed to send to connection:", error);
       }
     }
-    console.log(`[WebSocketHub] Broadcasted to ${sentCount}/${this.uidByConnection.size} connections (excluding sender)`);
+    console.log(
+      `[WebSocketHub] Broadcasted to ${sentCount}/${this.uidByConnection.size} connections (excluding sender)`,
+    );
   }
 
   // Broadcast to all connections with a specific UID
@@ -249,15 +284,24 @@ export class WebSocketHub {
         connection.send(message);
         sentCount++;
       } catch (error) {
-        console.error(`[WebSocketHub] Failed to send to connection for UID=${uid}:`, error);
+        console.error(
+          `[WebSocketHub] Failed to send to connection for UID=${uid}:`,
+          error,
+        );
       }
     }
-    console.log(`[WebSocketHub] Broadcasted to ${sentCount} connections for UID=${uid}`);
+    console.log(
+      `[WebSocketHub] Broadcasted to ${sentCount} connections for UID=${uid}`,
+    );
     return sentCount;
   }
 
   // Broadcast to all connections with a specific UID except one (avoid echo)
-  broadcastToUIDExcept(uid: string, message: string, excludeWs: WebSocket): number {
+  broadcastToUIDExcept(
+    uid: string,
+    message: string,
+    excludeWs: WebSocket,
+  ): number {
     const connections = this.connectionsByUID.get(uid);
     if (!connections) {
       console.log(`[WebSocketHub] No connections found for UID=${uid}`);
@@ -273,10 +317,15 @@ export class WebSocketHub {
         connection.send(message);
         sentCount++;
       } catch (error) {
-        console.error(`[WebSocketHub] Failed to send to connection for UID=${uid}:`, error);
+        console.error(
+          `[WebSocketHub] Failed to send to connection for UID=${uid}:`,
+          error,
+        );
       }
     }
-    console.log(`[WebSocketHub] Broadcasted to ${sentCount}/${connections.size} connections for UID=${uid} (excluding sender)`);
+    console.log(
+      `[WebSocketHub] Broadcasted to ${sentCount}/${connections.size} connections for UID=${uid} (excluding sender)`,
+    );
     return sentCount;
   }
 }

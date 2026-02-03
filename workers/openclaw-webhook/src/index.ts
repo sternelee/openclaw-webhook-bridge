@@ -1,5 +1,5 @@
-import { Hono } from 'hono';
-import { WebSocketHub } from './websocket-hub';
+import { Hono } from "hono";
+import { WebSocketHub } from "./websocket-hub";
 
 // Export the Durable Object class for wrangler.toml
 export { WebSocketHub };
@@ -18,63 +18,61 @@ type Variables = {
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Middleware: Create Durable Object stub and inject into context
-app.use('*', async (c, next) => {
+app.use("*", async (c, next) => {
   // Use a fixed name so all connections go to the same Durable Object instance
-  const id = c.env.WEBSOCKET_HUB.idFromName('global-hub');
+  const id = c.env.WEBSOCKET_HUB.idFromName("global-hub");
   const stub = c.env.WEBSOCKET_HUB.get(id);
-  c.set('hub', stub);
+  c.set("hub", stub);
   await next();
 });
 
-// WebSocket route - upgrade connection (supports ?uid=xxx query param)
-app.get('/ws', async (c) => {
-  // Reject requests that don't require WebSocket upgrade
-  if (c.req.header('upgrade') !== 'websocket') {
-    return c.text('Expected Upgrade: websocket', 426);
+// WebSocket route - requires ?uid=xxx query parameter
+app.get("/ws", async (c) => {
+  if (c.req.header("upgrade") !== "websocket") {
+    return c.text("Expected Upgrade: websocket", 426);
   }
 
-  const stub = c.get('hub');
+  const stub = c.get("hub");
   return stub.fetch(c.req.raw);
 });
 
 // WebSocket route with UID in path - /ws/:uid
-app.get('/ws/:uid', async (c) => {
-  // Reject requests that don't require WebSocket upgrade
-  if (c.req.header('upgrade') !== 'websocket') {
-    return c.text('Expected Upgrade: websocket', 426);
+app.get("/ws/:uid", async (c) => {
+  if (c.req.header("upgrade") !== "websocket") {
+    return c.text("Expected Upgrade: websocket", 426);
   }
 
-  const stub = c.get('hub');
+  const stub = c.get("hub");
   return stub.fetch(c.req.raw);
 });
 
 // Health check endpoint with test page
-app.get('/', (c) => {
+app.get("/", (c) => {
   return c.html(getTestPage());
 });
 
 // Stats endpoint
-app.get('/stats', async (c) => {
-  const stub = c.get('hub');
+app.get("/stats", async (c) => {
+  const stub = c.get("hub");
   return stub.fetch(c.req.raw);
 });
 
 // Health check endpoint
-app.get('/health', async (c) => {
-  const stub = c.get('hub');
+app.get("/health", async (c) => {
+  const stub = c.get("hub");
   return stub.fetch(c.req.raw);
 });
 
 // Broadcast endpoint - can be called from bridge to send messages to all clients
-app.post('/broadcast', async (c) => {
-  const body = await c.req.json() as Record<string, unknown>;
-  const stub = c.get('hub');
+app.post("/broadcast", async (c) => {
+  const body = (await c.req.json()) as Record<string, unknown>;
+  const stub = c.get("hub");
   return stub.fetch(
     new Request(c.req.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    })
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
   );
 });
 
@@ -192,7 +190,7 @@ function getTestPage(): string {
     <div class="panel">
       <h2>Connection</h2>
       <div class="input-group">
-        <input type="text" id="uidInput" placeholder="UID (optional)" value="">
+        <input type="text" id="uidInput" placeholder="UID (required)" value="" required>
         <input type="text" id="wsUrl" value="" placeholder="WebSocket URL">
         <button class="btn-connect" id="connectBtn" onclick="connect()">Connect</button>
         <button class="btn-disconnect" id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
@@ -259,19 +257,21 @@ function getTestPage(): string {
       let url = document.getElementById('wsUrl').value;
       const uid = document.getElementById('uidInput').value.trim();
 
-      // Append UID to URL if provided
-      if (uid) {
-        const separator = url.includes('?') ? '&' : '?';
-        url = url + separator + 'uid=' + encodeURIComponent(uid);
+      // UID is now REQUIRED
+      if (!uid) {
+        addMessage('error', 'UID is required. Please enter a UID to connect.');
+        return;
       }
+
+      // Append UID to URL
+      const separator = url.includes('?') ? '&' : '?';
+      url = url + separator + 'uid=' + encodeURIComponent(uid);
 
       ws = new WebSocket(url);
 
       ws.onopen = () => {
         setStatus(true);
-        const uid = document.getElementById('uidInput').value.trim();
-        const uidMsg = uid ? ' (UID: ' + uid + ')' : '';
-        addMessage('info', 'Connected to WebSocket server' + uidMsg);
+        addMessage('info', 'Connected to WebSocket server (UID: ' + uid + ')');
       };
 
       ws.onmessage = (event) => {
