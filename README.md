@@ -1,13 +1,13 @@
-# ClawdBot Bridge
+# OpenClaw Bridge
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?flat&logo=go)](https://go.dev/)
 
-连接 WebSocket Webhook 服务与 ClawdBot AI Agent 的桥接服务。
+连接 WebSocket Webhook 服务与 OpenClaw AI Agent 的桥接服务。
 
 ## 前置要求
 
-- ClawdBot Gateway 正在本地运行（默认端口 18789，配置在 `~/.clawdbot/clawdbot.json` 或者 `~/.openclaw/openclaw.json`）
+- OpenClaw Gateway 正在本地运行（默认端口 18789，配置在 `~/.openclaw/openclaw.json` 或者 `~/.openclaw/openclaw.json`）
 - 一个 WebSocket 服务端用于接收消息和发送响应
 
 ## 安装
@@ -16,27 +16,27 @@
 
 **Linux (amd64)**
 ```bash
-curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/clawdbot-bridge-linux-amd64 && mv clawdbot-bridge-linux-amd64 clawdbot-bridge && chmod +x clawdbot-bridge
+curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/openclaw-bridge-linux-amd64 && mv openclaw-bridge-linux-amd64 openclaw-bridge && chmod +x openclaw-bridge
 ```
 
 **Linux (arm64)**
 ```bash
-curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/clawdbot-bridge-linux-arm64 && mv clawdbot-bridge-linux-arm64 clawdbot-bridge && chmod +x clawdbot-bridge
+curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/openclaw-bridge-linux-arm64 && mv openclaw-bridge-linux-arm64 openclaw-bridge && chmod +x openclaw-bridge
 ```
 
 **macOS (arm64 / Apple Silicon)**
 ```bash
-curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/clawdbot-bridge-darwin-arm64 && mv clawdbot-bridge-darwin-arm64 clawdbot-bridge && chmod +x clawdbot-bridge
+curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/openclaw-bridge-darwin-arm64 && mv openclaw-bridge-darwin-arm64 openclaw-bridge && chmod +x openclaw-bridge
 ```
 
 **macOS (amd64 / Intel)**
 ```bash
-curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/clawdbot-bridge-darwin-amd64 && mv clawdbot-bridge-darwin-amd64 clawdbot-bridge && chmod +x clawdbot-bridge
+curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/openclaw-bridge-darwin-amd64 && mv openclaw-bridge-darwin-amd64 openclaw-bridge && chmod +x openclaw-bridge
 ```
 
 **Windows (amd64)**
 ```powershell
-Invoke-WebRequest -Uri https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/clawdbot-bridge-windows-amd64.exe -OutFile clawdbot-bridge.exe
+Invoke-WebRequest -Uri https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/openclaw-bridge-windows-amd64.exe -OutFile openclaw-bridge.exe
 ```
 
 也可以直接从 [Releases](https://github.com/sternelee/openclaw-webhook-bridge/releases) 页面手动下载。
@@ -46,23 +46,23 @@ Invoke-WebRequest -Uri https://github.com/sternelee/openclaw-webhook-bridge/rele
 ```bash
 git clone https://github.com/sternelee/openclaw-webhook-bridge.git
 cd moltbotCNAPP
-go build -o clawdbot-bridge ./cmd/bridge/
+go build -o openclaw-bridge ./cmd/bridge/
 ```
 
 ## 使用
 
 ### 首次启动
 
-传入 WebSocket URL，会自动保存到 `~/.clawdbot/bridge.json`：
+传入 WebSocket URL，会自动保存到 `~/.openclaw/bridge.json`：
 
 ```bash
-./clawdbot-bridge start webhook_url=ws://localhost:8080/ws
+./openclaw-bridge start webhook_url=ws://localhost:8080/ws
 ```
 
 或者不传入参数，程序会提示输入：
 
 ```bash
-./clawdbot-bridge start
+./openclaw-bridge start
 # Enter WebSocket URL (e.g., ws://localhost:8080/ws): ws://localhost:8080/ws
 ```
 
@@ -71,11 +71,11 @@ go build -o clawdbot-bridge ./cmd/bridge/
 凭据保存后，直接使用：
 
 ```bash
-./clawdbot-bridge start     # 后台启动
-./clawdbot-bridge stop      # 停止
-./clawdbot-bridge restart   # 重启
-./clawdbot-bridge status    # 查看状态
-./clawdbot-bridge run       # 前台运行（方便调试）
+./openclaw-bridge start     # 后台启动
+./openclaw-bridge stop      # 停止
+./openclaw-bridge restart   # 重启
+./openclaw-bridge status    # 查看状态
+./openclaw-bridge run       # 前台运行（方便调试）
 ```
 
 ### 可选参数
@@ -83,12 +83,12 @@ go build -o clawdbot-bridge ./cmd/bridge/
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `webhook_url` | WebSocket 服务端 URL | — |
-| `agent_id` | ClawdBot Agent ID | `main` |
+| `agent_id` | OpenClaw Agent ID | `main` |
 
 ### 查看日志
 
 ```bash
-tail -f ~/.clawdbot/bridge.log
+tail -f ~/.openclaw/bridge.log
 ```
 
 ## WebSocket 协议
@@ -146,7 +146,7 @@ tail -f ~/.clawdbot/bridge.log
 
 ```bash
 # 前台运行（日志直接输出到终端）
-./clawdbot-bridge run
+./openclaw-bridge run
 
 # 编译所有平台
 ./scripts/build.sh

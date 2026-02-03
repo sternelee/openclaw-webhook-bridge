@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ClawdBot Bridge is a Go service that connects Chinese IM platforms (Feishu/Lark) with the ClawdBot AI Agent Gateway. It acts as a WebSocket bridge between Feishu's WebSocket API and ClawdBot's local WebSocket gateway.
+OpenClaw Bridge is a Go service that connects Chinese IM platforms (Feishu/Lark) with the OpenClaw AI Agent Gateway. It acts as a WebSocket bridge between Feishu's WebSocket API and OpenClaw's local WebSocket gateway.
 
 ## Architecture
 
@@ -12,19 +12,19 @@ The bridge has four main components:
 
 1. **Feishu Client** (`internal/feishu/client.go`) - WebSocket client for Feishu/Lark events using the official oapi-sdk-go v3 SDK. Handles incoming messages and provides methods to send/update/delete messages.
 
-2. **ClawdBot Client** (`internal/clawdbot/client.go`) - WebSocket client for ClawdBot Gateway (local). Implements the gateway protocol: connect challenge → connect → agent request → stream events (assistant, thought, tool_call, tool_result, lifecycle).
+2. **OpenClaw Client** (`internal/openclaw/client.go`) - WebSocket client for OpenClaw Gateway (local). Implements the gateway protocol: connect challenge → connect → agent request → stream events (assistant, thought, tool_call, tool_result, lifecycle).
 
 3. **Bridge** (`internal/bridge/bridge.go`) - Core logic that:
-   - Routes messages from Feishu to ClawdBot
+   - Routes messages from Feishu to OpenClaw
    - Manages session keys per chat (format: `feishu:{chatID}`)
    - Deduplicates messages using a TTL cache (10 minutes)
    - Handles group chat trigger detection (mentions, question marks, action verbs, bot names)
    - Optionally shows "thinking..." placeholder if response takes longer than `thinking_ms`
-   - Handles `NO_REPLY` responses from ClawdBot (suppresses sending messages)
+   - Handles `NO_REPLY` responses from OpenClaw (suppresses sending messages)
 
 4. **Config** (`internal/config/config.go`) - Loads configuration from:
-   - `~/.clawdbot/clawdbot.json` or `~/.openclaw/openclaw.json` (gateway config)
-   - `~/.clawdbot/bridge.json` (bridge config - Feishu credentials)
+   - `~/.openclaw/openclaw.json` or `~/.openclaw/openclaw.json` (gateway config)
+   - `~/.openclaw/bridge.json` (bridge config - Feishu credentials)
 
 ## Build Commands
 
@@ -32,7 +32,7 @@ The bridge has four main components:
 # Build current platform
 make build
 # or
-go build -o clawdbot-bridge ./cmd/bridge/
+go build -o openclaw-bridge ./cmd/bridge/
 
 # Build all platforms
 make build-all
@@ -57,22 +57,22 @@ make lint
 
 ```bash
 # First-time setup with Feishu credentials
-./clawdbot-bridge start fs_app_id=cli_xxx fs_app_secret=yyy
+./openclaw-bridge start fs_app_id=cli_xxx fs_app_secret=yyy
 
 # Subsequent runs (credentials saved)
-./clawdbot-bridge start   # Start as daemon
-./clawdbot-bridge stop    # Stop
-./clawdbot-bridge status  # Check status
-./clawdbot-bridge run     # Run in foreground (for debugging)
+./openclaw-bridge start   # Start as daemon
+./openclaw-bridge stop    # Stop
+./openclaw-bridge status  # Check status
+./openclaw-bridge run     # Run in foreground (for debugging)
 ```
 
-Logs are written to `~/.clawdbot/bridge.log`.
+Logs are written to `~/.openclaw/bridge.log`.
 
 ## Key Design Decisions
 
-- **Circular dependency resolution**: The Bridge needs both FeishuClient and ClawdBotClient, but ClawdBotClient doesn't need FeishuClient. The main creates Bridge with `nil` FeishuClient first, then calls `SetFeishuClient()` after FeishuClient is constructed.
+- **Circular dependency resolution**: The Bridge needs both FeishuClient and OpenClawClient, but OpenClawClient doesn't need FeishuClient. The main creates Bridge with `nil` FeishuClient first, then calls `SetFeishuClient()` after FeishuClient is constructed.
 
-- **Session management**: Each Feishu chat gets a unique session key `feishu:{chatID}` in ClawdBot, enabling conversation continuity per chat.
+- **Session management**: Each Feishu chat gets a unique session key `feishu:{chatID}` in OpenClaw, enabling conversation continuity per chat.
 
 - **Message deduplication**: Feishu may deliver the same message multiple times. The bridge uses a 10-minute TTL cache to skip duplicate processing.
 
@@ -81,12 +81,12 @@ Logs are written to `~/.clawdbot/bridge.log`.
   - Message ends with "?" or "？"
   - Contains question words (why, how, what, etc.)
   - Contains Chinese action verbs (帮, 麻烦, 请, etc.)
-  - Message starts with bot name triggers (alen, clawdbot, bot, 助手, 智能体)
+  - Message starts with bot name triggers (alen, openclaw, bot, 助手, 智能体)
 
 - **"Thinking..." placeholder**: If `thinking_ms > 0`, the bridge shows "正在思考…" after the threshold, then updates that message with the actual response. This avoids UI flicker for fast responses.
 
 ## Dependencies
 
 - `github.com/larksuite/oapi-sdk-go/v3` - Feishu/Lark SDK
-- `github.com/gorilla/websocket` - WebSocket client for ClawdBot Gateway
+- `github.com/gorilla/websocket` - WebSocket client for OpenClaw Gateway
 - `github.com/google/uuid` - Idempotency keys for agent requests

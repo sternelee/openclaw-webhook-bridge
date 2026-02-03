@@ -14,7 +14,7 @@
 # Build output
 /bin/
 /dist/
-clawdbot-bridge
+openclaw-bridge
 /bridge
 
 # Go workspace file
@@ -40,3 +40,4 @@ config.yaml
 
 node_modules/
 .wrangler
+openclaw-bridge

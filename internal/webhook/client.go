@@ -12,11 +12,11 @@ import (
 )
 
 // MessageHandler is called when a message is received from the webhook
-// The data is raw JSON bytes that will be forwarded directly to ClawdBot
+// The data is raw JSON bytes that will be forwarded directly to OpenClaw
 type MessageHandler func(data []byte) error
 
-// ResponseHandler is called when a response from ClawdBot should be forwarded to webhook
-// The data is raw JSON bytes from ClawdBot
+// ResponseHandler is called when a response from OpenClaw should be forwarded to webhook
+// The data is raw JSON bytes from OpenClaw
 type ResponseHandler func() ([]byte, error)
 
 // Client is a WebSocket webhook client
@@ -149,7 +149,7 @@ func (c *Client) connectAndRead() error {
 	}
 }
 
-// Send forwards raw JSON data to the webhook (from ClawdBot)
+// Send forwards raw JSON data to the webhook (from OpenClaw)
 func (c *Client) Send(data []byte) error {
 	c.connMu.RLock()
 	conn := c.conn

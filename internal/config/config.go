@@ -10,18 +10,18 @@ import (
 // Config holds all configuration for the bridge
 type Config struct {
 	WebhookURL string
-	Clawdbot   ClawdbotConfig
+	OpenClaw   OpenClawConfig
 }
 
-// ClawdbotConfig contains Clawdbot Gateway configuration
-type ClawdbotConfig struct {
+// OpenClawConfig contains OpenClaw Gateway configuration
+type OpenClawConfig struct {
 	GatewayPort  int
 	GatewayToken string
 	AgentID      string
 }
 
-// clawdbotJSON matches ~/.clawdbot/clawdbot.json (managed by ClawdBot)
-type clawdbotJSON struct {
+// openclawJSON matches ~/.openclaw/openclaw.json (managed by OpenClaw)
+type openclawJSON struct {
 	Gateway struct {
 		Port int `json:"port"`
 		Auth struct {
@@ -30,34 +30,34 @@ type clawdbotJSON struct {
 	} `json:"gateway"`
 }
 
-// bridgeJSON matches ~/.clawdbot/bridge.json
+// bridgeJSON matches ~/.openclaw/bridge.json
 type bridgeJSON struct {
 	WebhookURL string `json:"webhook_url"`
 	AgentID    string `json:"agent_id,omitempty"`
 }
 
 // Dir returns the config directory path
-// Tries ~/.clawdbot first, falls back to ~/.openclaw
+// Tries ~/.openclaw first, falls back to ~/.openclaw
 func Dir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	// Priority order: .clawdbot, .openclaw
+	// Priority order: .openclaw, .openclaw
 	candidates := []string{
-		filepath.Join(home, ".clawdbot"),
+		filepath.Join(home, ".openclaw"),
 		filepath.Join(home, ".openclaw"),
 	}
 
-	// Return first existing directory, or default to .clawdbot
+	// Return first existing directory, or default to .openclaw
 	for _, dir := range candidates {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
 			return dir, nil
 		}
 	}
 
-	// Default to .clawdbot if none exist
+	// Default to .openclaw if none exist
 	return candidates[0], nil
 }
 
@@ -75,8 +75,8 @@ func findConfigFile(dir string, candidates ...string) (string, error) {
 }
 
 // Load reads configuration from config files
-// Supports both ~/.clawdbot/ and ~/.openclaw/ directories
-// Gateway config: clawdbot.json or openclaw.json
+// Supports both ~/.openclaw/ and ~/.openclaw/ directories
+// Gateway config: openclaw.json or openclaw.json
 // Bridge config: bridge.json
 func Load() (*Config, error) {
 	dir, err := Dir()
@@ -84,16 +84,16 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	// Find gateway config file: clawdbot.json or openclaw.json
-	gwPath, err := findConfigFile(dir, "clawdbot.json", "openclaw.json")
+	// Find gateway config file: openclaw.json or openclaw.json
+	gwPath, err := findConfigFile(dir, "openclaw.json", "openclaw.json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to find gateway config (clawdbot.json or openclaw.json) in %s: %w", dir, err)
+		return nil, fmt.Errorf("failed to find gateway config (openclaw.json or openclaw.json) in %s: %w", dir, err)
 	}
 	gwData, err := os.ReadFile(gwPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s: %w", gwPath, err)
 	}
-	var gwCfg clawdbotJSON
+	var gwCfg openclawJSON
 	if err := json.Unmarshal(gwData, &gwCfg); err != nil {
 		return nil, fmt.Errorf("failed to parse %s: %w", gwPath, err)
 	}
@@ -115,13 +115,13 @@ func Load() (*Config, error) {
 
 	// Validate required fields
 	if brCfg.WebhookURL == "" {
-		return nil, fmt.Errorf("webhook_url is required in ~/.clawdbot/bridge.json")
+		return nil, fmt.Errorf("webhook_url is required in ~/.openclaw/bridge.json")
 	}
 
 	// Build config with defaults
 	cfg := &Config{
 		WebhookURL: brCfg.WebhookURL,
-		Clawdbot: ClawdbotConfig{
+		OpenClaw: OpenClawConfig{
 			GatewayPort:  gwCfg.Gateway.Port,
 			GatewayToken: gwCfg.Gateway.Auth.Token,
 			AgentID:      "main",
@@ -129,10 +129,10 @@ func Load() (*Config, error) {
 	}
 
 	if brCfg.AgentID != "" {
-		cfg.Clawdbot.AgentID = brCfg.AgentID
+		cfg.OpenClaw.AgentID = brCfg.AgentID
 	}
-	if cfg.Clawdbot.GatewayPort == 0 {
-		cfg.Clawdbot.GatewayPort = 18789
+	if cfg.OpenClaw.GatewayPort == 0 {
+		cfg.OpenClaw.GatewayPort = 18789
 	}
 
 	return cfg, nil

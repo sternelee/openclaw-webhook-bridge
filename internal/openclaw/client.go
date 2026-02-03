@@ -1,4 +1,4 @@
-package clawdbot
+package openclaw
 
 import (
 	"context"
@@ -12,11 +12,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// EventCallback is called for each event from ClawdBot Gateway
+// EventCallback is called for each event from OpenClaw Gateway
 // The data is the raw JSON event message
 type EventCallback func(data []byte)
 
-// Client is a ClawdBot Gateway WebSocket client with persistent connection
+// Client is an OpenClaw Gateway WebSocket client with persistent connection
 type Client struct {
 	port    int
 	token   string
@@ -34,7 +34,7 @@ type Client struct {
 	onEvent EventCallback
 }
 
-// NewClient creates a new ClawdBot Gateway client
+// NewClient creates a new OpenClaw Gateway client
 func NewClient(port int, token, agentID string) *Client {
 	return &Client{
 		port:    port,
@@ -43,7 +43,7 @@ func NewClient(port int, token, agentID string) *Client {
 	}
 }
 
-// SetEventCallback sets the callback for ClawdBot events
+// SetEventCallback sets the callback for OpenClaw events
 func (c *Client) SetEventCallback(cb EventCallback) {
 	c.onEvent = cb
 }
@@ -59,7 +59,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	// Wait for connection to be established
 	for i := 0; i < 50; i++ {
 		if c.connected.Load() {
-			log.Printf("[Clawdbot] Connected to gateway")
+			log.Printf("[OpenClaw] Connected to gateway")
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -70,7 +70,7 @@ func (c *Client) Connect(ctx context.Context) error {
 
 // Close gracefully shuts down the connection
 func (c *Client) Close() error {
-	log.Printf("[Clawdbot] Closing connection...")
+	log.Printf("[OpenClaw] Closing connection...")
 
 	c.cancel()
 	c.wg.Wait()
@@ -83,7 +83,7 @@ func (c *Client) Close() error {
 	c.connMu.Unlock()
 
 	c.connected.Store(false)
-	log.Printf("[Clawdbot] Connection closed")
+	log.Printf("[OpenClaw] Connection closed")
 	return nil
 }
 
@@ -97,13 +97,13 @@ func (c *Client) connectionLoop() {
 	for {
 		select {
 		case <-c.ctx.Done():
-			log.Printf("[Clawdbot] Connection loop: context cancelled")
+			log.Printf("[OpenClaw] Connection loop: context cancelled")
 			return
 		default:
 		}
 
 		if err := c.connectAndRead(); err != nil {
-			log.Printf("[Clawdbot] Connection error: %v", err)
+			log.Printf("[OpenClaw] Connection error: %v", err)
 
 			// Exponential backoff for reconnection
 			if reconnectDelay < maxReconnectDelay {
@@ -119,7 +119,7 @@ func (c *Client) connectionLoop() {
 		case <-c.ctx.Done():
 			return
 		case <-time.After(reconnectDelay):
-			log.Printf("[Clawdbot] Reconnecting...")
+			log.Printf("[OpenClaw] Reconnecting...")
 		}
 	}
 }
@@ -128,7 +128,7 @@ func (c *Client) connectionLoop() {
 func (c *Client) connectAndRead() error {
 	url := fmt.Sprintf("ws://127.0.0.1:%d", c.port)
 
-	log.Printf("[Clawdbot] Connecting to %s", url)
+	log.Printf("[OpenClaw] Connecting to %s", url)
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to dial: %w", err)
@@ -154,7 +154,7 @@ func (c *Client) connectAndRead() error {
 			return fmt.Errorf("read error: %w", err)
 		}
 
-		log.Printf("[Clawdbot] Received: %s", string(message))
+		log.Printf("[OpenClaw] Received: %s", string(message))
 
 		// Forward raw event to callback
 		if c.onEvent != nil {
@@ -184,14 +184,14 @@ func (c *Client) sendConnectRequest(conn *websocket.Conn) error {
 				"token": c.token,
 			},
 			"locale":    "zh-CN",
-			"userAgent": "clawdbot-bridge-go",
+			"userAgent": "openclaw-bridge-go",
 		},
 	}
 
 	return conn.WriteJSON(connectReq)
 }
 
-// SendRaw sends raw JSON data to ClawdBot Gateway
+// SendRaw sends raw JSON data to OpenClaw Gateway
 func (c *Client) SendRaw(data []byte) error {
 	// Wait for connection
 	for i := 0; i < 100; i++ {
@@ -199,7 +199,7 @@ func (c *Client) SendRaw(data []byte) error {
 			break
 		}
 		if i == 0 {
-			log.Printf("[Clawdbot] Waiting for connection...")
+			log.Printf("[OpenClaw] Waiting for connection...")
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -216,7 +216,7 @@ func (c *Client) SendRaw(data []byte) error {
 		return fmt.Errorf("connection lost")
 	}
 
-	log.Printf("[Clawdbot] Sending: %s", string(data))
+	log.Printf("[OpenClaw] Sending: %s", string(data))
 
 	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 		return fmt.Errorf("failed to send: %w", err)
@@ -225,7 +225,7 @@ func (c *Client) SendRaw(data []byte) error {
 	return nil
 }
 
-// SendAgentRequest sends an agent request to ClawdBot
+// SendAgentRequest sends an agent request to OpenClaw
 func (c *Client) SendAgentRequest(message, sessionKey string) error {
 	req := map[string]interface{}{
 		"type":   "req",

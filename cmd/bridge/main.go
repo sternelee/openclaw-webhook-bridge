@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/sternelee/openclaw-webhook-bridge/internal/bridge"
-	"github.com/sternelee/openclaw-webhook-bridge/internal/clawdbot"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/openclaw"
 	"github.com/sternelee/openclaw-webhook-bridge/internal/config"
 	"github.com/sternelee/openclaw-webhook-bridge/internal/webhook"
 )
@@ -55,7 +55,7 @@ func main() {
 		}
 		cmdRun()
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\nUsage:\n  clawdbot-bridge start [webhook_url=ws://...]\n  clawdbot-bridge stop\n  clawdbot-bridge status\n  clawdbot-bridge restart\n  clawdbot-bridge run\n", cmd)
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\nUsage:\n  openclaw-bridge start [webhook_url=ws://...]\n  openclaw-bridge stop\n  openclaw-bridge status\n  openclaw-bridge restart\n  openclaw-bridge run\n", cmd)
 		os.Exit(1)
 	}
 }
@@ -168,7 +168,7 @@ func cmdStatus() {
 
 func cmdRun() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Println("[Main] Starting ClawdBot Bridge...")
+	log.Println("[Main] Starting OpenClaw Bridge...")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -176,20 +176,20 @@ func cmdRun() {
 	}
 
 	log.Printf("[Main] Loaded config: WebhookURL=%s, Gateway=127.0.0.1:%d, AgentID=%s",
-		cfg.WebhookURL, cfg.Clawdbot.GatewayPort, cfg.Clawdbot.AgentID)
+		cfg.WebhookURL, cfg.OpenClaw.GatewayPort, cfg.OpenClaw.AgentID)
 
-	// Create ClawdBot client
-	clawdbotClient := clawdbot.NewClient(
-		cfg.Clawdbot.GatewayPort,
-		cfg.Clawdbot.GatewayToken,
-		cfg.Clawdbot.AgentID,
+	// Create OpenClaw client
+	clawdbotClient := openclaw.NewClient(
+		cfg.OpenClaw.GatewayPort,
+		cfg.OpenClaw.GatewayToken,
+		cfg.OpenClaw.AgentID,
 	)
 
 	// Create bridge
 	bridgeInstance := bridge.NewBridge(nil, clawdbotClient)
 
-	// Set ClawdBot event callback to forward to webhook
-	clawdbotClient.SetEventCallback(bridgeInstance.HandleClawdBotEvent)
+	// Set OpenClaw event callback to forward to webhook
+	clawdbotClient.SetEventCallback(bridgeInstance.HandleOpenClawEvent)
 
 	// Create webhook client with bridge message handler
 	webhookClient := webhook.NewClient(
@@ -203,10 +203,10 @@ func cmdRun() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start ClawdBot persistent connection
-	log.Println("[Main] Connecting to ClawdBot Gateway...")
+	// Start OpenClaw persistent connection
+	log.Println("[Main] Connecting to OpenClaw Gateway...")
 	if err := clawdbotClient.Connect(ctx); err != nil {
-		log.Fatalf("[Main] Failed to connect to ClawdBot Gateway: %v", err)
+		log.Fatalf("[Main] Failed to connect to OpenClaw Gateway: %v", err)
 	}
 	defer clawdbotClient.Close()
 
@@ -228,7 +228,7 @@ func cmdRun() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	log.Println("[Main] ClawdBot Bridge started successfully")
+	log.Println("[Main] OpenClaw Bridge started successfully")
 	log.Println("[Main] Press Ctrl+C to stop")
 
 	select {
@@ -237,7 +237,7 @@ func cmdRun() {
 		cancel()
 	}
 
-	log.Println("[Main] ClawdBot Bridge stopped")
+	log.Println("[Main] OpenClaw Bridge stopped")
 }
 
 func isRunning(pidPath string) bool {

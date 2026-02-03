@@ -1,4 +1,4 @@
-name = "clawdbot-webhook"
+name = "openclaw-webhook"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
@@ -14,15 +14,15 @@ new_classes = ["WebSocketHub"]
 
 [vars]
 # Environment variables can be added here
-# CLAWDBOT_BRIDGE_URL = "wss://your-bridge-url.com"
+# OPENCLAW_BRIDGE_URL = "wss://your-bridge-url.com"
 
 # Development configuration
 [env.dev]
-name = "clawdbot-webhook-dev"
+name = "openclaw-webhook-dev"
 
 # Production configuration
 [env.production]
-name = "clawdbot-webhook-prod"
+name = "openclaw-webhook-prod"
 
 # Routes for custom domain (optional)
 # routes = [

@@ -1,7 +1,7 @@
 {
   "name": "local-webhook-server",
   "version": "1.0.0",
-  "description": "Local WebSocket server for ClawdBot webhook testing",
+  "description": "Local WebSocket server for OpenClaw webhook testing",
   "main": "server.js",
   "type": "module",
   "scripts": {

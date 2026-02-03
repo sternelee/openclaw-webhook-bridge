@@ -1,7 +1,7 @@
 {
-  "name": "clawdbot-webhook",
+  "name": "openclaw-webhook",
   "version": "1.0.0",
-  "description": "Cloudflare Worker webhook service for ClawdBot bridge with WebSocket support",
+  "description": "Cloudflare Worker webhook service for OpenClaw bridge with WebSocket support",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",

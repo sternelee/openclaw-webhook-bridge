@@ -60,7 +60,7 @@ function getTestPage(): Response {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ClawdBot Webhook - WebSocket Test (Durable Objects)</title>
+  <title>OpenClaw Webhook - WebSocket Test (Durable Objects)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -156,7 +156,7 @@ function getTestPage(): Response {
 </head>
 <body>
   <div class="container">
-    <h1>ClawdBot Webhook WebSocket Test</h1>
+    <h1>OpenClaw Webhook WebSocket Test</h1>
     <div class="do-badge"><span>🔗 Powered by Cloudflare Durable Objects</span></div>
 
     <div class="status">

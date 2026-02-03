@@ -4,18 +4,18 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/sternelee/openclaw-webhook-bridge/internal/clawdbot"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/openclaw"
 	"github.com/sternelee/openclaw-webhook-bridge/internal/webhook"
 )
 
-// Bridge is a simple passthrough between Webhook and ClawdBot
+// Bridge is a simple passthrough between Webhook and OpenClaw
 type Bridge struct {
 	webhookClient  *webhook.Client
-	clawdbotClient *clawdbot.Client
+	clawdbotClient *openclaw.Client
 }
 
 // NewBridge creates a new bridge
-func NewBridge(webhookClient *webhook.Client, clawdbotClient *clawdbot.Client) *Bridge {
+func NewBridge(webhookClient *webhook.Client, clawdbotClient *openclaw.Client) *Bridge {
 	return &Bridge{
 		webhookClient:  webhookClient,
 		clawdbotClient: clawdbotClient,
@@ -27,9 +27,9 @@ func (b *Bridge) SetWebhookClient(client *webhook.Client) {
 	b.webhookClient = client
 }
 
-// HandleWebhookMessage handles a message from the webhook and forwards to ClawdBot
+// HandleWebhookMessage handles a message from the webhook and forwards to OpenClaw
 func (b *Bridge) HandleWebhookMessage(data []byte) error {
-	log.Printf("[Bridge] Webhook -> ClawdBot: %s", string(data))
+	log.Printf("[Bridge] Webhook -> OpenClaw: %s", string(data))
 
 	// Check if this is a control message (not a user message)
 	var controlMsg struct {
@@ -70,9 +70,9 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 	return b.clawdbotClient.SendAgentRequest(msg.Content, sessionKey)
 }
 
-// HandleClawdBotEvent handles an event from ClawdBot and forwards to webhook
-func (b *Bridge) HandleClawdBotEvent(data []byte) {
-	log.Printf("[Bridge] ClawdBot -> Webhook: %s", string(data))
+// HandleOpenClawEvent handles an event from OpenClaw and forwards to webhook
+func (b *Bridge) HandleOpenClawEvent(data []byte) {
+	log.Printf("[Bridge] OpenClaw -> Webhook: %s", string(data))
 
 	if err := b.webhookClient.Send(data); err != nil {
 		log.Printf("[Bridge] Failed to send to webhook: %v", err)
