@@ -16,30 +16,14 @@ new_classes = ["WebSocketHub"]
 # Environment variables can be added here
 # OPENCLAW_BRIDGE_URL = "wss://your-bridge-url.com"
 
-# Development configuration
-[env.dev]
-name = "openclaw-webhook-dev"
-
 # Production configuration
 [env.production]
 name = "openclaw-webhook-prod"
+[[durable_objects.bindings]]
+name = "WEBSOCKET_HUB"
+class_name = "WebSocketHub"
 
 # Routes for custom domain (optional)
 # routes = [
 #   { pattern = "webhook.yourdomain.com/*", zone_name = "yourdomain.com" }
 # ]
-
-[observability]
-enabled = false
-head_sampling_rate = 1
-
-[observability.logs]
-enabled = true
-head_sampling_rate = 1
-persist = true
-invocation_logs = true
-
-[observability.traces]
-enabled = false
-persist = true
-head_sampling_rate = 1

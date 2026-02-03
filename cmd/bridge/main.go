@@ -278,33 +278,58 @@ func readPID(pidPath string) (int, error) {
 func applyConfigArgs(args []string) {
 	kv := parseKeyValue(args)
 	webhookURL := kv["webhook_url"]
-
-	// If no webhook_url provided, prompt for it
-	if webhookURL == "" {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("Enter WebSocket URL (e.g., ws://localhost:8080/ws): ")
-		webhookURL, _ = reader.ReadString('\n')
-		webhookURL = strings.TrimSpace(webhookURL)
-		if webhookURL == "" {
-			log.Fatal("webhook_url is required")
-		}
-	}
+	uid := kv["uid"]
 
 	dir, err := config.Dir()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Read existing config if present
+	// Read existing config if present to use as defaults
 	var cfg bridgeConfigJSON
+	defaultWebhookURL := ""
+	defaultUID := ""
 	if data, err := os.ReadFile(filepath.Join(dir, "bridge.json")); err == nil {
 		json.Unmarshal(data, &cfg)
+		defaultWebhookURL = cfg.WebhookURL
+		defaultUID = cfg.AgentID // Using agent_id field as uid for compatibility
+	}
+
+	// If no webhook_url provided, prompt for it with default value
+	if webhookURL == "" {
+		reader := bufio.NewReader(os.Stdin)
+		if defaultWebhookURL != "" {
+			fmt.Printf("Enter WebSocket URL [%s]: ", defaultWebhookURL)
+		} else {
+			fmt.Print("Enter WebSocket URL (e.g., ws://localhost:8080/ws): ")
+		}
+		input, _ := reader.ReadString('\n')
+		webhookURL = strings.TrimSpace(input)
+		if webhookURL == "" && defaultWebhookURL != "" {
+			webhookURL = defaultWebhookURL
+		}
+		if webhookURL == "" {
+			log.Fatal("webhook_url is required")
+		}
+	}
+
+	// If no uid provided, prompt for it with default value
+	if uid == "" {
+		reader := bufio.NewReader(os.Stdin)
+		if defaultUID != "" {
+			fmt.Printf("Enter UID [%s]: ", defaultUID)
+		} else {
+			fmt.Print("Enter UID (optional, press Enter to skip): ")
+		}
+		input, _ := reader.ReadString('\n')
+		uid = strings.TrimSpace(input)
+		if uid == "" {
+			uid = defaultUID
+		}
 	}
 
 	cfg.WebhookURL = webhookURL
-	if v, ok := kv["agent_id"]; ok {
-		cfg.AgentID = v
-	}
+	cfg.AgentID = uid
 
 	data, _ := json.MarshalIndent(cfg, "", "  ")
 	path := filepath.Join(dir, "bridge.json")

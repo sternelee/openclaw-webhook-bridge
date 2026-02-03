@@ -4,27 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OpenClaw Bridge is a Go service that connects Chinese IM platforms (Feishu/Lark) with the OpenClaw AI Agent Gateway. It acts as a WebSocket bridge between Feishu's WebSocket API and OpenClaw's local WebSocket gateway.
+OpenClaw Bridge is a Go service that connects a generic WebSocket webhook service with the OpenClaw AI Agent Gateway. It acts as a WebSocket bridge between a webhook server and OpenClaw's local WebSocket gateway.
 
 ## Architecture
 
 The bridge has four main components:
 
-1. **Feishu Client** (`internal/feishu/client.go`) - WebSocket client for Feishu/Lark events using the official oapi-sdk-go v3 SDK. Handles incoming messages and provides methods to send/update/delete messages.
+1. **Webhook Client** (`internal/webhook/client.go`) - WebSocket client for the webhook server. Handles incoming JSON messages and forwards OpenClaw responses back to the webhook.
 
 2. **OpenClaw Client** (`internal/openclaw/client.go`) - WebSocket client for OpenClaw Gateway (local). Implements the gateway protocol: connect challenge → connect → agent request → stream events (assistant, thought, tool_call, tool_result, lifecycle).
 
 3. **Bridge** (`internal/bridge/bridge.go`) - Core logic that:
-   - Routes messages from Feishu to OpenClaw
-   - Manages session keys per chat (format: `feishu:{chatID}`)
-   - Deduplicates messages using a TTL cache (10 minutes)
-   - Handles group chat trigger detection (mentions, question marks, action verbs, bot names)
-   - Optionally shows "thinking..." placeholder if response takes longer than `thinking_ms`
-   - Handles `NO_REPLY` responses from OpenClaw (suppresses sending messages)
+   - Routes messages from the webhook to OpenClaw
+   - Skips control messages (`connected`, `error`, `event`)
+   - Creates session keys when missing (format: `webhook:{messageID}`)
 
 4. **Config** (`internal/config/config.go`) - Loads configuration from:
-   - `~/.openclaw/openclaw.json` or `~/.openclaw/openclaw.json` (gateway config)
-   - `~/.openclaw/bridge.json` (bridge config - Feishu credentials)
+   - `~/.openclaw/openclaw.json` (gateway config)
+   - `~/.openclaw/bridge.json` (bridge config - webhook URL, agent ID, UID)
 
 ## Build Commands
 
@@ -56,10 +53,10 @@ make lint
 ## Running the Bridge
 
 ```bash
-# First-time setup with Feishu credentials
-./openclaw-bridge start fs_app_id=cli_xxx fs_app_secret=yyy
+# First-time setup with webhook URL
+./openclaw-bridge start webhook_url=ws://localhost:8080/ws
 
-# Subsequent runs (credentials saved)
+# Subsequent runs (config saved)
 ./openclaw-bridge start   # Start as daemon
 ./openclaw-bridge stop    # Stop
 ./openclaw-bridge status  # Check status
@@ -70,23 +67,11 @@ Logs are written to `~/.openclaw/bridge.log`.
 
 ## Key Design Decisions
 
-- **Circular dependency resolution**: The Bridge needs both FeishuClient and OpenClawClient, but OpenClawClient doesn't need FeishuClient. The main creates Bridge with `nil` FeishuClient first, then calls `SetFeishuClient()` after FeishuClient is constructed.
+- **Session management**: Each incoming webhook message uses `session` if provided; otherwise the bridge generates `webhook:{messageID}` to keep OpenClaw conversations isolated.
 
-- **Session management**: Each Feishu chat gets a unique session key `feishu:{chatID}` in OpenClaw, enabling conversation continuity per chat.
-
-- **Message deduplication**: Feishu may deliver the same message multiple times. The bridge uses a 10-minute TTL cache to skip duplicate processing.
-
-- **Group chat triggers**: In group chats, the bot only responds when:
-  - Mentioned (@bot)
-  - Message ends with "?" or "？"
-  - Contains question words (why, how, what, etc.)
-  - Contains Chinese action verbs (帮, 麻烦, 请, etc.)
-  - Message starts with bot name triggers (alen, openclaw, bot, 助手, 智能体)
-
-- **"Thinking..." placeholder**: If `thinking_ms > 0`, the bridge shows "正在思考…" after the threshold, then updates that message with the actual response. This avoids UI flicker for fast responses.
+- **Control message filtering**: The bridge ignores webhook control payloads with `type` values like `connected`, `error`, or `event`.
 
 ## Dependencies
 
-- `github.com/larksuite/oapi-sdk-go/v3` - Feishu/Lark SDK
-- `github.com/gorilla/websocket` - WebSocket client for OpenClaw Gateway
+- `github.com/gorilla/websocket` - WebSocket client for webhook and OpenClaw Gateway
 - `github.com/google/uuid` - Idempotency keys for agent requests

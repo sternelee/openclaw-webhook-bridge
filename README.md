@@ -7,8 +7,8 @@
 
 ## 前置要求
 
-- OpenClaw Gateway 正在本地运行（默认端口 18789，配置在 `~/.openclaw/openclaw.json` 或者 `~/.openclaw/openclaw.json`）
-- 一个 WebSocket 服务端用于接收消息和发送响应
+- OpenClaw Gateway 正在本地运行（默认端口 18789，配置在 `~/.openclaw/openclaw.json`）
+- 一个 WebSocket 服务端用于接收消息和发送响应（Webhook 服务）
 
 ## 安装
 
@@ -68,7 +68,7 @@ go build -o openclaw-bridge ./cmd/bridge/
 
 ### 日常管理
 
-凭据保存后，直接使用：
+配置保存后，直接使用：
 
 ```bash
 ./openclaw-bridge start     # 后台启动
@@ -85,6 +85,16 @@ go build -o openclaw-bridge ./cmd/bridge/
 | `webhook_url` | WebSocket 服务端 URL | — |
 | `agent_id` | OpenClaw Agent ID | `main` |
 
+`uid` 不在命令行参数中提供，默认启动时自动生成；如需固定 UID，可手动写入 `~/.openclaw/bridge.json`：
+
+```json
+{
+  "webhook_url": "ws://localhost:8080/ws",
+  "agent_id": "main",
+  "uid": "your-stable-uid"
+}
+```
+
 ### 查看日志
 
 ```bash
@@ -92,6 +102,8 @@ tail -f ~/.openclaw/bridge.log
 ```
 
 ## WebSocket 协议
+
+桥接服务连接 WebSocket 时会在 URL 上追加 `uid` 查询参数（例如 `ws://localhost:8080/ws?uid=...`），用于服务端区分多个桥接实例。
 
 ### 客户端发送消息格式
 
@@ -106,7 +118,9 @@ tail -f ~/.openclaw/bridge.log
 字段说明：
 - `id`: 必填，消息唯一标识，用于去重
 - `content`: 必填，消息内容
-- `session`: 可选，会话 ID，如果不提供则使用消息 ID
+- `session`: 可选，会话 ID，如果不提供则使用消息 ID 生成 `webhook:{id}`
+
+桥接服务会忽略控制消息（`type` 为 `connected`、`error`、`event` 的 payload），避免将非用户消息转发给 OpenClaw。
 
 ### 服务端响应格式
 
