@@ -1,12 +1,12 @@
 package config
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/google/uuid"
 )
 
 // Config holds all configuration for the bridge
@@ -150,20 +150,9 @@ func Load() (*Config, error) {
 }
 
 // generateUID generates a unique ID for this bridge instance
-// Format: bridge-{hostname}-{8-char-hex}
+// Uses UUID v4 for uniqueness
 func generateUID() string {
-	// Get hostname (fallback to "unknown" if error)
-	h, _ := os.Hostname()
-	if h == "" {
-		h = "unknown"
-	}
-
-	// Generate 8 random hex bytes
-	b := make([]byte, 4)
-	rand.Read(b)
-	randomHex := hex.EncodeToString(b)
-
-	return fmt.Sprintf("bridge-%s-%s", h, randomHex)
+	return uuid.New().String()
 }
 
 // GetDisplayUID returns a formatted display string for the UID
