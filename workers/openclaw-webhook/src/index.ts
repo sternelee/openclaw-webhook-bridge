@@ -1,3 +1,4 @@
+import { Hono } from 'hono';
 import { WebSocketHub } from './websocket-hub';
 
 // Export the Durable Object class for wrangler.toml
@@ -8,59 +9,72 @@ export interface Env {
   WEBSOCKET_HUB: DurableObjectNamespace;
 }
 
-// Main worker - routes requests to the Durable Object
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-    const upgradeHeader = request.headers.get('Upgrade');
-
-    // Get the Durable Object stub
-    const hubId = env.WEBSOCKET_HUB.idFromName('global-hub');
-    const hub = env.WEBSOCKET_HUB.get(hubId);
-
-    // Route WebSocket connections to the Durable Object
-    if (upgradeHeader === 'websocket') {
-      // Forward WebSocket upgrade requests to the Durable Object
-      return hub.fetch(request);
-    }
-
-    // Route API requests to the Durable Object
-    if (url.pathname === '/stats' || url.pathname === '/health') {
-      return hub.fetch(request);
-    }
-
-    // Serve the test page
-    if (url.pathname === '/' || url.pathname === '/index.html') {
-      return getTestPage();
-    }
-
-    // Broadcast API endpoint
-    if (url.pathname === '/broadcast' && request.method === 'POST') {
-      const body = await request.json() as Record<string, unknown>;
-      // Forward to Durable Object
-      const broadcastReq = new Request(
-        new URL('/broadcast', request.url),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        }
-      );
-      return hub.fetch(broadcastReq);
-    }
-
-    return new Response('Not found', { status: 404 });
-  }
+// Hono app type with Variables for middleware injection
+type Variables = {
+  hub: DurableObjectStub;
 };
 
+// Create Hono app with proper types
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// Middleware: Create Durable Object stub and inject into context
+app.use('*', async (c, next) => {
+  // Use a fixed name so all connections go to the same Durable Object instance
+  const id = c.env.WEBSOCKET_HUB.idFromName('global-hub');
+  const stub = c.env.WEBSOCKET_HUB.get(id);
+  c.set('hub', stub);
+  await next();
+});
+
+// WebSocket route - upgrade connection
+app.get('/ws', async (c) => {
+  // Reject requests that don't require WebSocket upgrade
+  if (c.req.header('upgrade') !== 'websocket') {
+    return c.text('Expected Upgrade: websocket', 426);
+  }
+
+  const stub = c.get('hub');
+  return stub.fetch(c.req.raw);
+});
+
+// Health check endpoint with test page
+app.get('/', (c) => {
+  return c.html(getTestPage());
+});
+
+// Stats endpoint
+app.get('/stats', async (c) => {
+  const stub = c.get('hub');
+  return stub.fetch(c.req.raw);
+});
+
+// Health check endpoint
+app.get('/health', async (c) => {
+  const stub = c.get('hub');
+  return stub.fetch(c.req.raw);
+});
+
+// Broadcast endpoint - can be called from bridge to send messages to all clients
+app.post('/broadcast', async (c) => {
+  const body = await c.req.json() as Record<string, unknown>;
+  const stub = c.get('hub');
+  return stub.fetch(
+    new Request(c.req.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+  );
+});
+
 // Test page HTML
-function getTestPage(): Response {
-  const html = `<!DOCTYPE html>
+function getTestPage(): string {
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenClaw Webhook - WebSocket Test (Durable Objects)</title>
+  <title>OpenClaw Webhook - WebSocket Test (Hono + Durable Objects)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -71,7 +85,7 @@ function getTestPage(): Response {
       color: #eee;
     }
     .container { max-width: 800px; margin: 0 auto; }
-    h1 { text-align: center; margin-bottom: 30px; color: #4ade80; }
+    h1 { text-align: center; margin-bottom: 20px; color: #4ade80; }
     .do-badge {
       text-align: center;
       margin-bottom: 20px;
@@ -157,7 +171,7 @@ function getTestPage(): Response {
 <body>
   <div class="container">
     <h1>OpenClaw Webhook WebSocket Test</h1>
-    <div class="do-badge"><span>🔗 Powered by Cloudflare Durable Objects</span></div>
+    <div class="do-badge"><span>🔗 Hono + Cloudflare Durable Objects</span></div>
 
     <div class="status">
       <span class="status-dot" id="statusDot"></span>
@@ -195,9 +209,6 @@ function getTestPage(): Response {
     document.getElementById('wsUrl').value = wsUrl;
 
     let ws = null;
-    let sentCount = 0;
-    let receivedCount = 0;
-    let errorCount = 0;
     let messageId = 0;
 
     function addMessage(type, text) {
@@ -238,11 +249,10 @@ function getTestPage(): Response {
 
       ws.onopen = () => {
         setStatus(true);
-        addMessage('info', 'Connected to WebSocket server (Durable Object)');
+        addMessage('info', 'Connected to WebSocket server (Hono + Durable Objects)');
       };
 
       ws.onmessage = (event) => {
-        receivedCount++;
         try {
           const data = JSON.parse(event.data);
           addMessage('received', 'Message: ' + JSON.stringify(data));
@@ -252,7 +262,6 @@ function getTestPage(): Response {
       };
 
       ws.onerror = () => {
-        errorCount++;
         addMessage('error', 'WebSocket error occurred');
       };
 
@@ -287,7 +296,6 @@ function getTestPage(): Response {
       };
 
       ws.send(JSON.stringify(message));
-      sentCount++;
       addMessage('sent', 'Sent: ' + JSON.stringify(message));
       document.getElementById('messageContent').value = '';
     }
@@ -298,8 +306,7 @@ function getTestPage(): Response {
   </script>
 </body>
 </html>`;
-
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
-  });
 }
+
+// Export Hono app
+export default app;
