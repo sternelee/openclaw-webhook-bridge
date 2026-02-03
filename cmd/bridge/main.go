@@ -76,9 +76,17 @@ func cmdStart() {
 	}
 
 	// Validate config before daemonizing so errors are visible
-	if _, err := config.Load(); err != nil {
+	cfg, err := config.Load()
+	if err != nil {
 		log.Fatalf("Config error: %v", err)
 	}
+
+	// Display UID prominently before daemonizing
+	fmt.Println()
+	fmt.Println("╔══════════════════════════════════════════════════════════╗")
+	fmt.Printf("║  %-50s                                         ║\n", config.GetDisplayUID(cfg))
+	fmt.Println("╚══════════════════════════════════════════════════════════╝")
+	fmt.Println()
 
 	// Open log file
 	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
