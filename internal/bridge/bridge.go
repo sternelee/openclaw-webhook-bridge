@@ -31,6 +31,18 @@ func (b *Bridge) SetWebhookClient(client *webhook.Client) {
 func (b *Bridge) HandleWebhookMessage(data []byte) error {
 	log.Printf("[Bridge] Webhook -> ClawdBot: %s", string(data))
 
+	// Check if this is a control message (not a user message)
+	var controlMsg struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &controlMsg); err == nil {
+		// Skip control messages like "connected", "error", etc.
+		if controlMsg.Type == "connected" || controlMsg.Type == "error" || controlMsg.Type == "event" {
+			log.Printf("[Bridge] Skipping control message: type=%s", controlMsg.Type)
+			return nil
+		}
+	}
+
 	// Parse the message to extract content and session
 	var msg struct {
 		ID      string `json:"id"`
@@ -39,8 +51,14 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 	}
 	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Printf("[Bridge] Failed to parse webhook message: %v", err)
-		// Send raw data anyway
-		return b.clawdbotClient.SendRaw(data)
+		// Skip unparseable messages
+		return nil
+	}
+
+	// Skip empty messages
+	if msg.Content == "" {
+		log.Printf("[Bridge] Skipping empty message")
+		return nil
 	}
 
 	// Forward as agent request

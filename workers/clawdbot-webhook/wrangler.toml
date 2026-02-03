@@ -1,0 +1,20 @@
+name = "clawdbot-webhook"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+# Environment variables can be added here
+# CLAWDBOT_BRIDGE_URL = "wss://your-bridge-url.com"
+
+# Development configuration
+[env.dev]
+name = "clawdbot-webhook-dev"
+
+# Production configuration
+[env.production]
+name = "clawdbot-webhook-prod"
+
+# Routes for custom domain (optional)
+# routes = [
+#   { pattern = "webhook.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]
