@@ -14,6 +14,10 @@ type Config struct {
 	WebhookURL string
 	OpenClaw   OpenClawConfig
 	UID        string // Unique ID for this bridge instance
+
+	// Session configuration
+	SessionStorePath string // Path to session store JSON file
+	SessionScope     string // Session scope: "per-sender" or "global"
 }
 
 // OpenClawConfig contains OpenClaw Gateway configuration
@@ -145,6 +149,12 @@ func Load() (*Config, error) {
 	} else {
 		cfg.UID = generateUID()
 	}
+
+	// Set session store path
+	cfg.SessionStorePath = filepath.Join(dir, "sessions.json")
+
+	// Session scope defaults to per-sender
+	cfg.SessionScope = "per-sender"
 
 	return cfg, nil
 }
