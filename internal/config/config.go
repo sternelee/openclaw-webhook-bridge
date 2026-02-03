@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +13,7 @@ import (
 type Config struct {
 	WebhookURL string
 	OpenClaw   OpenClawConfig
+	UID        string // Unique ID for this bridge instance
 }
 
 // OpenClawConfig contains OpenClaw Gateway configuration
@@ -34,6 +37,7 @@ type openclawJSON struct {
 type bridgeJSON struct {
 	WebhookURL string `json:"webhook_url"`
 	AgentID    string `json:"agent_id,omitempty"`
+	UID        string `json:"uid,omitempty"` // Optional pre-configured UID
 }
 
 // Dir returns the config directory path
@@ -122,7 +126,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		WebhookURL: brCfg.WebhookURL,
 		OpenClaw: OpenClawConfig{
-			GatewayPort:  gwCfg.Gateway.Port,
+			GatewayPort: gwCfg.Gateway.Port,
 			GatewayToken: gwCfg.Gateway.Auth.Token,
 			AgentID:      "main",
 		},
@@ -135,5 +139,34 @@ func Load() (*Config, error) {
 		cfg.OpenClaw.GatewayPort = 18789
 	}
 
+	// Generate or set UID
+	if brCfg.UID != "" {
+		cfg.UID = brCfg.UID
+	} else {
+		cfg.UID = generateUID()
+	}
+
 	return cfg, nil
+}
+
+// generateUID generates a unique ID for this bridge instance
+// Format: bridge-{hostname}-{8-char-hex}
+func generateUID() string {
+	// Get hostname (fallback to "unknown" if error)
+	h, _ := os.Hostname()
+	if h == "" {
+		h = "unknown"
+	}
+
+	// Generate 8 random hex bytes
+	b := make([]byte, 4)
+	rand.Read(b)
+	randomHex := hex.EncodeToString(b)
+
+	return fmt.Sprintf("bridge-%s-%s", h, randomHex)
+}
+
+// GetDisplayUID returns a formatted display string for the UID
+func GetDisplayUID(cfg *Config) string {
+	return fmt.Sprintf("Bridge UID: %s", cfg.UID)
 }

@@ -12,6 +12,7 @@ import (
 type Bridge struct {
 	webhookClient  *webhook.Client
 	clawdbotClient *openclaw.Client
+	uid           string // Unique ID for this bridge instance
 }
 
 // NewBridge creates a new bridge
@@ -25,6 +26,12 @@ func NewBridge(webhookClient *webhook.Client, clawdbotClient *openclaw.Client) *
 // SetWebhookClient sets the webhook client after construction
 func (b *Bridge) SetWebhookClient(client *webhook.Client) {
 	b.webhookClient = client
+}
+
+// SetUID sets the unique ID for this bridge
+func (b *Bridge) SetUID(uid string) {
+	b.uid = uid
+	log.Printf("[Bridge] Bridge UID set to: %s", b.uid)
 }
 
 // HandleWebhookMessage handles a message from the webhook and forwards to OpenClaw

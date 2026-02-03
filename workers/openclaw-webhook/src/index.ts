@@ -26,8 +26,19 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// WebSocket route - upgrade connection
+// WebSocket route - upgrade connection (supports ?uid=xxx query param)
 app.get('/ws', async (c) => {
+  // Reject requests that don't require WebSocket upgrade
+  if (c.req.header('upgrade') !== 'websocket') {
+    return c.text('Expected Upgrade: websocket', 426);
+  }
+
+  const stub = c.get('hub');
+  return stub.fetch(c.req.raw);
+});
+
+// WebSocket route with UID in path - /ws/:uid
+app.get('/ws/:uid', async (c) => {
   // Reject requests that don't require WebSocket upgrade
   if (c.req.header('upgrade') !== 'websocket') {
     return c.text('Expected Upgrade: websocket', 426);

@@ -175,6 +175,14 @@ func cmdRun() {
 		log.Fatalf("[Main] Failed to load config: %v", err)
 	}
 
+	// ==========================================
+	// DISPLAY BRIDGE UID (prominently)
+	// ==========================================
+	fmt.Println()
+	fmt.Println("╔══════════════════════════════════════════════════════════╗")
+	fmt.Printf("║  %-50s                                         ║\n", config.GetDisplayUID(cfg))
+	fmt.Println("╚══════════════════════════════════════════════════════════╝")
+	fmt.Println()
 	log.Printf("[Main] Loaded config: WebhookURL=%s, Gateway=127.0.0.1:%d, AgentID=%s",
 		cfg.WebhookURL, cfg.OpenClaw.GatewayPort, cfg.OpenClaw.AgentID)
 
@@ -187,6 +195,7 @@ func cmdRun() {
 
 	// Create bridge
 	bridgeInstance := bridge.NewBridge(nil, clawdbotClient)
+	bridgeInstance.SetUID(cfg.UID) // Set UID for message routing
 
 	// Set OpenClaw event callback to forward to webhook
 	clawdbotClient.SetEventCallback(bridgeInstance.HandleOpenClawEvent)
@@ -195,6 +204,7 @@ func cmdRun() {
 	webhookClient := webhook.NewClient(
 		cfg.WebhookURL,
 		bridgeInstance.HandleWebhookMessage,
+		cfg.UID, // Pass UID for message identification
 	)
 
 	// Set webhook client on bridge

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +24,7 @@ type ResponseHandler func() ([]byte, error)
 // Client is a WebSocket webhook client
 type Client struct {
 	url       string
+	uid       string // Unique ID for this bridge
 	handler   MessageHandler
 	conn      *websocket.Conn
 	connMu    sync.RWMutex
@@ -32,9 +35,10 @@ type Client struct {
 }
 
 // NewClient creates a new webhook client
-func NewClient(url string, handler MessageHandler) *Client {
+func NewClient(url string, handler MessageHandler, uid string) *Client {
 	return &Client{
 		url:     url,
+		uid:     uid,
 		handler: handler,
 	}
 }
@@ -117,9 +121,20 @@ func (c *Client) connectionLoop() {
 
 // connectAndRead establishes connection and reads messages
 func (c *Client) connectAndRead() error {
-	log.Printf("[Webhook] Connecting to %s", c.url)
+	// Append UID to URL for identification
+	wsURL := c.url
+	if c.uid != "" {
+		// Check if URL already has query params
+		separator := "?"
+		if strings.Contains(wsURL, "?") {
+			separator = "&"
+		}
+		wsURL = wsURL + separator + "uid=" + url.QueryEscape(c.uid)
+	}
 
-	conn, _, err := websocket.DefaultDialer.Dial(c.url, nil)
+	log.Printf("[Webhook] Connecting to %s (UID: %s)", wsURL, c.uid)
+
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to dial: %w", err)
 	}
