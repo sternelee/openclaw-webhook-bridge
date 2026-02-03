@@ -100,9 +100,15 @@ export class WebSocketHub {
       const message = JSON.parse(data as string);
       console.log('[WebSocketHub] Received from client:', JSON.stringify(message));
 
-      // Broadcast to all connected clients (including sender)
-      // This creates a relay effect where messages are distributed
-      this.broadcast(JSON.stringify(message));
+      // Check if this is a control message that shouldn't be broadcast to clients
+      // Control messages from ClawdBot (type: "res", "event") are internal only
+      if (message.type === 'res' || message.type === 'event') {
+        console.log('[WebSocketHub] Skipping control message, not broadcasting');
+        return;
+      }
+
+      // Broadcast to all connected clients EXCEPT the sender (no echo)
+      this.broadcastExcept(JSON.stringify(message), ws);
     } catch (error) {
       console.error('[WebSocketHub] Error processing message:', error);
     }
@@ -135,5 +141,23 @@ export class WebSocketHub {
       }
     }
     console.log(`[WebSocketHub] Broadcasted to ${sentCount}/${this.connections.size} connections`);
+  }
+
+  // Broadcast to all clients except one (used to avoid echoing back to sender)
+  broadcastExcept(message: string, excludeWs: WebSocket): void {
+    let sentCount = 0;
+    for (const connection of this.connections) {
+      // Skip the sender socket to avoid echo
+      if (connection === excludeWs) {
+        continue;
+      }
+      try {
+        connection.send(message);
+        sentCount++;
+      } catch (error) {
+        console.error('[WebSocketHub] Failed to send to connection:', error);
+      }
+    }
+    console.log(`[WebSocketHub] Broadcasted to ${sentCount}/${this.connections.size} connections (excluding sender)`);
   }
 }
