@@ -2,6 +2,7 @@ import { Component } from "react";
 import { View, Text, Input, Button, Switch } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { observer, inject } from "mobx-react";
+import { observable } from "mobx";
 import "./index.scss";
 
 interface SettingsProps {
@@ -12,14 +13,16 @@ interface SettingsProps {
 @inject("chatStore", "counterStore")
 @observer
 class Settings extends Component<SettingsProps> {
-  private wsUrlInput: string = "";
-  private sessionIdInput: string = "";
+  @observable wsUrlInput: string = "";
+  @observable sessionIdInput: string = "";
+  @observable uidInput: string = "";
 
   componentDidMount() {
     const { chatStore } = this.props;
     if (chatStore) {
       this.wsUrlInput = chatStore.wsUrl || "";
       this.sessionIdInput = chatStore.sessionId || "";
+      this.uidInput = chatStore.uid || "";
     }
   }
 
@@ -31,12 +34,17 @@ class Settings extends Component<SettingsProps> {
     this.sessionIdInput = e.detail.value;
   };
 
+  handleUidChange = (e: any) => {
+    this.uidInput = e.detail.value;
+  };
+
   handleSaveSettings = async () => {
     const { chatStore } = this.props;
 
     try {
       chatStore.setWsUrl(this.wsUrlInput.trim());
       chatStore.setSessionId(this.sessionIdInput.trim());
+      chatStore.setUid(this.uidInput.trim());
 
       Taro.showToast({
         title: "保存成功",
@@ -155,6 +163,16 @@ class Settings extends Component<SettingsProps> {
                 placeholder="自动生成或手动输入"
                 value={this.sessionIdInput}
                 onInput={this.handleSessionIdChange}
+              />
+            </View>
+            <View className="form-group">
+              <Text className="form-label">Bridge UID（必填）</Text>
+              <Input
+                className="form-input"
+                type="text"
+                placeholder="输入 Bridge 实例的 UID"
+                value={this.uidInput}
+                onInput={this.handleUidChange}
               />
             </View>
             <View className="button-group">

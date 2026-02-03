@@ -2,7 +2,7 @@
   "miniprogramRoot": "dist/",
   "projectname": "openclaw-mapp",
   "description": "OpenClaw WeChat Mini Program",
-  "appid": "touristappid",
+  "appid": "wx47cf84f458781f68",
   "setting": {
     "urlCheck": false,
     "es6": false,

@@ -3,7 +3,14 @@ import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { observer, inject } from "mobx-react";
 import { ChatMessage } from "../../types/openclaw";
+import towxml from "../../components/towxml";
 import "./index.scss";
+
+// Helper component to render towxml without type errors
+const TowxmlRenderer = ({ nodes }: { nodes: any }) => {
+  // @ts-ignore - towxml is a native WeChat component registered in app.config.ts
+  return <towxml nodes={nodes} />;
+};
 
 interface ChatProps {
   chatStore?: any;
@@ -121,6 +128,16 @@ class Chat extends Component<ChatProps> {
     const isUser = message.role === "user";
     const isError = message.status === "error";
 
+    // Parse markdown for assistant messages
+    let parsedContent = null;
+    if (!isUser && message.content) {
+      try {
+        parsedContent = towxml(message.content, 'markdown');
+      } catch (e) {
+        console.error('Failed to parse markdown:', e);
+      }
+    }
+
     return (
       <View
         key={message.id}
@@ -131,9 +148,19 @@ class Chat extends Component<ChatProps> {
             <Text className="message-status">发送中...</Text>
           )}
           {isError && <Text className="message-status error">发送失败</Text>}
-          <Text className={`message-content ${isError ? "error" : ""}`}>
-            {message.content}
-          </Text>
+          {isUser ? (
+            <Text className={`message-content ${isError ? "error" : ""}`}>
+              {message.content}
+            </Text>
+          ) : parsedContent ? (
+            <View className="message-content markdown">
+              <TowxmlRenderer nodes={parsedContent} />
+            </View>
+          ) : (
+            <Text className={`message-content ${isError ? "error" : ""}`}>
+              {message.content}
+            </Text>
+          )}
           <Text className="message-time">
             {new Date(message.timestamp).toLocaleTimeString()}
           </Text>

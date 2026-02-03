@@ -11,6 +11,9 @@ export default {
     navigationBarTitleText: "OpenClaw",
     navigationBarTextStyle: "black",
   },
+  usingComponents: {
+    towxml: "./components/towxml-build/towxml",
+  },
   tabBar: {
     color: "#999",
     selectedColor: "#1890ff",
@@ -20,20 +23,14 @@ export default {
       {
         pagePath: "pages/welcome/index",
         text: "Welcome",
-        iconPath: "assets/icons/welcome.png",
-        selectedIconPath: "assets/icons/welcome-active.png",
       },
       {
         pagePath: "pages/chat/index",
         text: "Chat",
-        iconPath: "assets/icons/chat.png",
-        selectedIconPath: "assets/icons/chat-active.png",
       },
       {
         pagePath: "pages/settings/index",
         text: "Settings",
-        iconPath: "assets/icons/settings.png",
-        selectedIconPath: "assets/icons/settings-active.png",
       },
     ],
   },

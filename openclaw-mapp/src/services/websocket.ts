@@ -9,6 +9,7 @@ export type WebSocketStatus =
 export class WebSocketService {
   private ws: any = null;
   private url: string = "";
+  private uid: string = ""; // UID for routing
   private reconnectTimer: any = null;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
@@ -22,6 +23,19 @@ export class WebSocketService {
 
   setUrl(url: string) {
     this.url = url;
+  }
+
+  setUid(uid: string) {
+    this.uid = uid;
+  }
+
+  // Get the URL with UID query parameter appended
+  private getUrlWithUid(): string {
+    if (!this.uid) {
+      return this.url;
+    }
+    const separator = this.url.includes("?") ? "&" : "?";
+    return `${this.url}${separator}uid=${encodeURIComponent(this.uid)}`;
   }
 
   onMessage(handler: (data: any) => void) {
@@ -62,7 +76,7 @@ export class WebSocketService {
 
       try {
         this.ws = Taro.connectSocket({
-          url: this.url,
+          url: this.getUrlWithUid(),
           protocols: ["echo-protocol"],
         });
 

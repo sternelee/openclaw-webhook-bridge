@@ -15,6 +15,7 @@ class ChatStore {
   @observable connecting: boolean = false;
   @observable wsStatus: WebSocketStatus = "disconnected";
   @observable sessionId: string = "";
+  @observable uid: string = ""; // Bridge UID for routing
 
   private wsService = getWebSocketService();
 
@@ -58,8 +59,12 @@ class ChatStore {
       if (settings) {
         this.wsUrl = settings.wsUrl || "";
         this.sessionId = settings.sessionId || "";
+        this.uid = settings.uid || "";
         if (this.wsUrl) {
           this.wsService.setUrl(this.wsUrl);
+        }
+        if (this.uid) {
+          this.wsService.setUid(this.uid);
         }
       }
     } catch (error) {
@@ -73,6 +78,7 @@ class ChatStore {
       Taro.setStorageSync("openclaw_settings", {
         wsUrl: this.wsUrl,
         sessionId: this.sessionId,
+        uid: this.uid,
       });
     } catch (error) {
       console.error("Failed to save settings:", error);
@@ -89,6 +95,13 @@ class ChatStore {
   @action
   setSessionId = (id: string) => {
     this.sessionId = id;
+    this.saveSettings();
+  };
+
+  @action
+  setUid = (uid: string) => {
+    this.uid = uid;
+    this.wsService.setUid(uid);
     this.saveSettings();
   };
 

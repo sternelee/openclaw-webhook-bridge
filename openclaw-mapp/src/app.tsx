@@ -1,9 +1,11 @@
-import { Component } from "react";
+import { Component, PropsWithChildren } from "react";
 import { Provider } from "mobx-react";
-import "./app.scss";
 import { chatStore, counterStore } from "./store";
+import "./app.scss";
 
-class App extends Component {
+interface AppProps extends PropsWithChildren {}
+
+class App extends Component<AppProps> {
   render() {
     return (
       <Provider chatStore={chatStore} counterStore={counterStore}>
