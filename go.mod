@@ -1,4 +1,4 @@
-module github.com/wy51ai/moltbotCNAPP
+module github.com/sternelee/openclaw-webhook-bridge
 
 go 1.21
 
