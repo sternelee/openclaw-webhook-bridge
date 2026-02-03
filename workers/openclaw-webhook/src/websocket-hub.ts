@@ -6,7 +6,7 @@ export interface Env {
 // Durable Object for managing WebSocket connections
 // Following the Fiberplane pattern for Hono + Durable Objects + WebSocket Hibernation
 export class WebSocketHub {
-  // Set of WebSocket connections (using Set for simpler management)
+  // Set of WebSocket connections (these are the server sockets from acceptWebSocket)
   connections: Set<WebSocket> = new Set();
   // Storage for the Durable Object state (WebSocket hibernation API)
   readonly #state: DurableObjectState;
@@ -18,13 +18,15 @@ export class WebSocketHub {
     this.#env = env;
 
     // IMPORTANT: Restore WebSocket connections after hibernation
-    // When a Durable Object wakes up from hibernation, we need to
-    // retrieve all existing WebSocket connections
+    // getWebSockets() returns the server sockets that were passed to acceptWebSocket()
     const websockets = this.#state.getWebSockets();
     for (const ws of websockets) {
       this.connections.add(ws);
     }
-    console.log(`[WebSocketHub] Awake from hibernation, connections: ${this.connections.size}`);
+    // Only log if there are actual connections
+    if (this.connections.size > 0) {
+      console.log(`[WebSocketHub] Awake from hibernation, connections: ${this.connections.size}`);
+    }
   }
 
   // Fetch method - main communication layer between Worker and Durable Object
@@ -42,17 +44,12 @@ export class WebSocketHub {
       // This allows the Durable Object to hibernate and save memory when inactive
       this.#state.acceptWebSocket(server);
 
-      // Add client to connections set
-      this.connections.add(client);
+      // Store the SERVER socket (not client) for broadcasting
+      // The client socket is returned to establish the connection
+      this.connections.add(server);
       console.log(`[WebSocketHub] WebSocket accepted, total connections: ${this.connections.size}`);
 
-      // Send welcome message to client
-      client.send(JSON.stringify({
-        type: 'connected',
-        timestamp: new Date().toISOString(),
-        connections: this.connections.size
-      }));
-
+      // Return the client socket to establish the connection
       return new Response(null, {
         status: 101,
         webSocket: client
@@ -97,6 +94,7 @@ export class WebSocketHub {
   }
 
   // WebSocket message handler - called when client sends a message
+  // Cloudflare calls this with the server socket (the one passed to acceptWebSocket)
   webSocketMessage(ws: WebSocket, data: string | ArrayBuffer) {
     try {
       const message = JSON.parse(data as string);
