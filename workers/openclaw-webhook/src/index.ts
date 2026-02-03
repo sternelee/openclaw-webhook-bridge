@@ -192,6 +192,7 @@ function getTestPage(): string {
     <div class="panel">
       <h2>Connection</h2>
       <div class="input-group">
+        <input type="text" id="uidInput" placeholder="UID (optional)" value="">
         <input type="text" id="wsUrl" value="" placeholder="WebSocket URL">
         <button class="btn-connect" id="connectBtn" onclick="connect()">Connect</button>
         <button class="btn-disconnect" id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
@@ -255,12 +256,22 @@ function getTestPage(): string {
     }
 
     function connect() {
-      const url = document.getElementById('wsUrl').value;
+      let url = document.getElementById('wsUrl').value;
+      const uid = document.getElementById('uidInput').value.trim();
+
+      // Append UID to URL if provided
+      if (uid) {
+        const separator = url.includes('?') ? '&' : '?';
+        url = url + separator + 'uid=' + encodeURIComponent(uid);
+      }
+
       ws = new WebSocket(url);
 
       ws.onopen = () => {
         setStatus(true);
-        addMessage('info', 'Connected to WebSocket server (Hono + Durable Objects)');
+        const uid = document.getElementById('uidInput').value.trim();
+        const uidMsg = uid ? ' (UID: ' + uid + ')' : '';
+        addMessage('info', 'Connected to WebSocket server' + uidMsg);
       };
 
       ws.onmessage = (event) => {
