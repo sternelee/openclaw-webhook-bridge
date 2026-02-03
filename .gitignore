@@ -37,3 +37,6 @@ config.yaml
 
 # Logs
 *.log
+
+node_modules/
+.wrangler

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/wy51ai/moltbotCNAPP/internal/clawdbot"
-	"github.com/wy51ai/moltbotCNAPP/internal/webhook"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/clawdbot"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/webhook"
 )
 
 // Bridge is a simple passthrough between Webhook and ClawdBot

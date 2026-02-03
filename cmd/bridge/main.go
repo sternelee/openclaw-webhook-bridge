@@ -14,10 +14,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wy51ai/moltbotCNAPP/internal/bridge"
-	"github.com/wy51ai/moltbotCNAPP/internal/clawdbot"
-	"github.com/wy51ai/moltbotCNAPP/internal/config"
-	"github.com/wy51ai/moltbotCNAPP/internal/webhook"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/bridge"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/clawdbot"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/config"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/webhook"
 )
 
 func main() {
