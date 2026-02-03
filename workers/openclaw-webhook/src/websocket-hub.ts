@@ -174,13 +174,6 @@ export class WebSocketHub {
       const message = JSON.parse(data as string);
       console.log(`[WebSocketHub] Received from UID=${uid}:`, JSON.stringify(message));
 
-      // Check if this is a control message that shouldn't be broadcast to clients
-      // Control messages from ClawdBot (type: "res", "event") are internal only
-      if (message.type === 'res' || message.type === 'event') {
-        console.log('[WebSocketHub] Skipping control message, not broadcasting');
-        return;
-      }
-
       // Broadcast to all connected clients with the SAME UID (no echo to sender)
       if (uid) {
         this.broadcastToUIDExcept(uid, JSON.stringify(message), ws);
