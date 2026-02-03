@@ -3,8 +3,9 @@ import path from "path";
 const config = {
   projectName: "openclaw-mapp",
   date: "2025-2-3",
-  designWidth: 750,
+  designWidth: 375,
   deviceRatio: {
+    375: 2,
     640: 2.34 / 2,
     750: 1,
     828: 1.81 / 2,

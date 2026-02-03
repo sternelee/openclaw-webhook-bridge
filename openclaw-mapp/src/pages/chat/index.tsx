@@ -1,26 +1,35 @@
 import { Component } from "react";
-import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
+import { View, ScrollView, Text } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { observer, inject } from "mobx-react";
-import { ChatMessage } from "../../types/openclaw";
-import towxml from "../../components/towxml";
+import { ChatMessage as ChatMessageType } from "../../types/openclaw";
+import ChatHeader from "../../components/ChatHeader";
+import ChatInput from "../../components/ChatInput";
+import TypingIndicator from "../../components/TypingIndicator";
+import { MessageGroup } from "../../components/Message";
+import SettingsModal from "../../components/SettingsModal";
 import "./index.scss";
-
-// Helper component to render towxml without type errors
-const TowxmlRenderer = ({ nodes }: { nodes: any }) => {
-  // @ts-ignore - towxml is a native WeChat component registered in app.config.ts
-  return <towxml nodes={nodes} />;
-};
 
 interface ChatProps {
   chatStore?: any;
 }
 
+interface ChatState {
+  showSettings: boolean;
+}
+
 @inject("chatStore")
 @observer
-class Chat extends Component<ChatProps> {
-  private inputContent: string = "";
+class Chat extends Component<ChatProps, ChatState> {
   private scrollViewRef: any = null;
+  private inputContent: string = "";
+
+  constructor(props: ChatProps) {
+    super(props);
+    this.state = {
+      showSettings: false,
+    };
+  }
 
   componentDidMount() {
     this.checkConnection();
@@ -33,17 +42,8 @@ class Chat extends Component<ChatProps> {
   checkConnection() {
     const { chatStore } = this.props;
     if (!chatStore?.wsUrl) {
-      Taro.showModal({
-        title: "提示",
-        content: "您还未配置服务器地址，是否前往设置？",
-        success: (res) => {
-          if (res.confirm) {
-            Taro.switchTab({
-              url: "/pages/welcome/index",
-            });
-          }
-        },
-      });
+      // Show settings modal instead of navigating
+      this.setState({ showSettings: true });
     } else if (!chatStore?.connected) {
       this.tryConnect();
     }
@@ -58,8 +58,9 @@ class Chat extends Component<ChatProps> {
     }
   }
 
-  handleInputChange = (e: any) => {
-    this.inputContent = e.detail.value;
+  handleInputChange = (value: string) => {
+    this.inputContent = value;
+    this.forceUpdate();
   };
 
   handleSend = async () => {
@@ -92,21 +93,6 @@ class Chat extends Component<ChatProps> {
     }
   };
 
-  scrollToBottom = () => {
-    setTimeout(() => {
-      const query = Taro.createSelectorQuery();
-      query.select(".messages-container").boundingClientRect();
-      query.exec((res) => {
-        if (res[0]) {
-          this.scrollViewRef?.scrollTo({
-            top: res[0].height,
-            duration: 300,
-          });
-        }
-      });
-    }, 100);
-  };
-
   handleClearHistory = () => {
     const { chatStore } = this.props;
     Taro.showModal({
@@ -124,77 +110,82 @@ class Chat extends Component<ChatProps> {
     });
   };
 
-  renderMessage = (message: ChatMessage) => {
-    const isUser = message.role === "user";
-    const isError = message.status === "error";
+  handleOpenSettings = () => {
+    this.setState({ showSettings: true });
+  };
 
-    // Parse markdown for assistant messages
-    let parsedContent = null;
-    if (!isUser && message.content) {
-      try {
-        parsedContent = towxml(message.content, 'markdown');
-      } catch (e) {
-        console.error('Failed to parse markdown:', e);
-      }
+  handleCloseSettings = () => {
+    this.setState({ showSettings: false });
+  };
+
+  handleSaveSettings = async (wsUrl: string, uid: string) => {
+    const { chatStore } = this.props;
+    await chatStore.setWsUrl(wsUrl);
+    await chatStore.setUid(uid);
+    // Reconnect after saving
+    if (wsUrl) {
+      this.tryConnect();
     }
+  };
 
-    return (
-      <View
-        key={message.id}
-        className={`message-item ${isUser ? "user" : "assistant"}`}
-      >
-        <View className="message-bubble">
-          {message.status === "sending" && (
-            <Text className="message-status">发送中...</Text>
-          )}
-          {isError && <Text className="message-status error">发送失败</Text>}
-          {isUser ? (
-            <Text className={`message-content ${isError ? "error" : ""}`}>
-              {message.content}
-            </Text>
-          ) : parsedContent ? (
-            <View className="message-content markdown">
-              <TowxmlRenderer nodes={parsedContent} />
-            </View>
-          ) : (
-            <Text className={`message-content ${isError ? "error" : ""}`}>
-              {message.content}
-            </Text>
-          )}
-          <Text className="message-time">
-            {new Date(message.timestamp).toLocaleTimeString()}
-          </Text>
-        </View>
-      </View>
-    );
+  scrollToBottom = () => {
+    setTimeout(() => {
+      const query = Taro.createSelectorQuery();
+      query.select(".messages-container").boundingClientRect();
+      query.exec((res) => {
+        if (res[0]) {
+          this.scrollViewRef?.scrollTo({
+            top: res[0].height,
+            duration: 300,
+          });
+        }
+      });
+    }, 100);
+  };
+
+  // Group consecutive messages from the same sender
+  groupMessages = (messages: ChatMessageType[]) => {
+    if (!messages || messages.length === 0) return [];
+
+    const groups: Array<{
+      role: "user" | "assistant";
+      messages: ChatMessageType[];
+    }> = [];
+
+    let currentGroup: typeof groups[0] | null = null;
+
+    messages.forEach((message) => {
+      if (!currentGroup || currentGroup.role !== message.role) {
+        currentGroup = {
+          role: message.role,
+          messages: [message],
+        };
+        groups.push(currentGroup);
+      } else {
+        currentGroup.messages.push(message);
+      }
+    });
+
+    return groups;
   };
 
   render() {
     const { chatStore } = this.props;
-    const { messages, connected, connecting } = chatStore || {};
+    const { messages, connected, connecting, streaming, wsUrl, uid } = chatStore || {};
+    const { showSettings } = this.state;
+    const messageGroups = this.groupMessages(messages || []);
 
     return (
       <View className="chat-page">
-        <View className="chat-header">
-          <Text className="header-title">OpenClaw Chat</Text>
-          <View className="header-actions">
-            <View
-              className={`status-badge ${connected ? "connected" : "disconnected"}`}
-            >
-              <Text className="status-text">
-                {connecting ? "连接中..." : connected ? "已连接" : "未连接"}
-              </Text>
-            </View>
-            <Button
-              className="clear-btn"
-              size="mini"
-              onClick={this.handleClearHistory}
-            >
-              清空
-            </Button>
-          </View>
-        </View>
+        {/* Header */}
+        <ChatHeader
+          connected={connected}
+          connecting={connecting}
+          onClear={this.handleClearHistory}
+          onSettings={this.handleOpenSettings}
+        />
 
+        {/* Messages */}
         <ScrollView
           className="messages-container"
           scrollY
@@ -202,13 +193,21 @@ class Chat extends Component<ChatProps> {
           ref={(ref: any) => {
             this.scrollViewRef = ref;
           }}
+          enableBackToTop
         >
           <View className="messages-list">
-            {messages && messages.length > 0 ? (
-              messages.map((msg) => this.renderMessage(msg))
+            {messageGroups.length > 0 ? (
+              messageGroups.map((group, index) => (
+                <MessageGroup
+                  key={`group-${index}`}
+                  messages={group.messages}
+                  role={group.role}
+                />
+              ))
             ) : (
               <View className="empty-state">
-                <Text className="empty-text">暂无消息</Text>
+                <View className="empty-icon">💬</View>
+                <Text className="empty-text">开始新的对话</Text>
                 <Text className="empty-hint">输入消息开始聊天</Text>
               </View>
             )}
@@ -216,25 +215,30 @@ class Chat extends Component<ChatProps> {
           </View>
         </ScrollView>
 
-        <View className="input-area">
-          <Input
-            className="message-input"
-            type="text"
-            placeholder="输入消息..."
-            value={this.inputContent}
-            onInput={this.handleInputChange}
-            onConfirm={this.handleSend}
-            confirmType="send"
-          />
-          <Button
-            className={`send-btn ${!this.inputContent?.trim() || !connected ? "disabled" : ""}`}
-            size="mini"
-            onClick={this.handleSend}
-            disabled={!this.inputContent?.trim() || !connected}
-          >
-            发送
-          </Button>
-        </View>
+        {/* Typing indicator */}
+        {streaming && (
+          <View className="typing-container">
+            <TypingIndicator text="OpenClaw 正在思考..." />
+          </View>
+        )}
+
+        {/* Input */}
+        <ChatInput
+          value={this.inputContent}
+          placeholder="输入消息..."
+          disabled={!connected}
+          onInput={this.handleInputChange}
+          onSend={this.handleSend}
+        />
+
+        {/* Settings Modal */}
+        <SettingsModal
+          visible={showSettings}
+          wsUrl={wsUrl || ""}
+          uid={uid || ""}
+          onClose={this.handleCloseSettings}
+          onSave={this.handleSaveSettings}
+        />
       </View>
     );
   }

@@ -3,7 +3,8 @@ export interface ChatMessage {
   content: string;
   role: "user" | "assistant";
   timestamp: number;
-  status?: "sending" | "sent" | "error";
+  status?: "sending" | "sent" | "error" | "streaming";
+  read?: boolean; // Read receipt status
 }
 
 export interface SendMessageRequest {
