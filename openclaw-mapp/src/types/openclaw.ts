@@ -6,6 +6,10 @@ export interface ChatMessage {
   status?: "sending" | "sent" | "error" | "streaming";
   read?: boolean; // Read receipt status
   session?: string;
+  messageType?: "chat" | "tool_call" | "tool_result" | "thought"; // Message type for display
+  toolName?: string; // Tool name for tool_call messages
+  toolResult?: "success" | "error" | "running"; // Tool execution status
+  collapsed?: boolean; // For tool_call/tool_result messages, whether content is collapsed
 }
 
 export interface SendMessageRequest {

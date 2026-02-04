@@ -620,6 +620,7 @@ class ChatStore {
           timestamp: payload.message?.timestamp || Date.now(),
           status: "streaming",
           session: sessionKey,
+          messageType: "chat",
         };
         this.addMessage(assistantMessage);
         this.setStreaming(true);
@@ -648,6 +649,96 @@ class ChatStore {
 
       // Mark user messages as read when we receive a response
       this.setAllMessagesRead();
+
+      if (sessionKey !== this.sessionId) {
+        this.setSessionId(sessionKey);
+      }
+      return;
+    }
+
+    // Handle tool_call events - when AI calls a tool/function
+    if (event === "tool_call") {
+      const sessionKey = payload?.sessionKey || this.sessionId || "default";
+      const toolName = payload?.toolName || payload?.name || "unknown";
+      const toolArgs = payload?.arguments || payload?.args || {};
+
+      this.touchSession(sessionKey);
+
+      // Create tool call message (collapsed by default)
+      const toolCallMessage: ChatMessage = {
+        id: `tool_call_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        content: JSON.stringify(toolArgs, null, 2),
+        role: "assistant",
+        timestamp: Date.now(),
+        status: "sent",
+        session: sessionKey,
+        messageType: "tool_call",
+        toolName,
+        toolResult: "running",
+        collapsed: true, // Default to collapsed
+      };
+      this.addMessage(toolCallMessage);
+
+      if (sessionKey !== this.sessionId) {
+        this.setSessionId(sessionKey);
+      }
+      return;
+    }
+
+    // Handle tool_result events - when tool execution completes
+    if (event === "tool_result") {
+      const sessionKey = payload?.sessionKey || this.sessionId || "default";
+      const toolName = payload?.toolName || payload?.name || "unknown";
+      const result = payload?.result || payload?.data;
+      const isError = payload?.error || payload?.isError || false;
+
+      this.touchSession(sessionKey);
+
+      // Create tool result message
+      const resultText = isError
+        ? `Error: ${JSON.stringify(result)}`
+        : typeof result === "string"
+          ? result
+          : JSON.stringify(result, null, 2);
+
+      const toolResultMessage: ChatMessage = {
+        id: `tool_result_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        content: resultText,
+        role: "assistant",
+        timestamp: Date.now(),
+        status: "sent",
+        session: sessionKey,
+        messageType: "tool_result",
+        toolName,
+        toolResult: isError ? "error" : "success",
+        collapsed: true, // Default to collapsed
+      };
+      this.addMessage(toolResultMessage);
+
+      if (sessionKey !== this.sessionId) {
+        this.setSessionId(sessionKey);
+      }
+      return;
+    }
+
+    // Handle thought events - AI reasoning/thinking
+    if (event === "thought") {
+      const sessionKey = payload?.sessionKey || this.sessionId || "default";
+      const thought = payload?.thought || payload?.content || "";
+
+      this.touchSession(sessionKey);
+
+      // Create thought message
+      const thoughtMessage: ChatMessage = {
+        id: `thought_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        content: thought,
+        role: "assistant",
+        timestamp: Date.now(),
+        status: "sent",
+        session: sessionKey,
+        messageType: "thought",
+      };
+      this.addMessage(thoughtMessage);
 
       if (sessionKey !== this.sessionId) {
         this.setSessionId(sessionKey);
