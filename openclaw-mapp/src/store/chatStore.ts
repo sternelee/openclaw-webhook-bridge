@@ -26,6 +26,9 @@ class ChatStore {
   @observable sessionsLoading: boolean = false;
 
   private wsService = getWebSocketService();
+  private sessionsLoadingTimeout: any = null;
+  private currentStreamingMessageId: string | null = null; // Track current streaming message ID
+  private currentRunId: string | null = null; // Track current run ID to detect new conversations
 
   constructor() {
     this.loadMessages();
@@ -49,7 +52,9 @@ class ChatStore {
     if (!active) {
       return this.messages;
     }
-    return this.messages.filter((message) => (message.session || "") === active);
+    return this.messages.filter(
+      (message) => (message.session || "") === active,
+    );
   }
 
   // Get grouped messages for display
@@ -65,7 +70,7 @@ class ChatStore {
       messages: ChatMessage[];
     }> = [];
 
-    let currentGroup: typeof groups[0] | null = null;
+    let currentGroup: (typeof groups)[0] | null = null;
 
     this.messages.forEach((message) => {
       if (!currentGroup || currentGroup.role !== message.role) {
@@ -172,7 +177,11 @@ class ChatStore {
   @action
   setPeerKind = (peerKind: string) => {
     const normalized = peerKind.trim().toLowerCase();
-    if (normalized === "dm" || normalized === "group" || normalized === "channel") {
+    if (
+      normalized === "dm" ||
+      normalized === "group" ||
+      normalized === "channel"
+    ) {
       this.peerKind = normalized;
     } else {
       this.peerKind = "";
@@ -220,12 +229,34 @@ class ChatStore {
     if (!this.connected) {
       return;
     }
+
+    // Clear any existing timeout
+    if (this.sessionsLoadingTimeout) {
+      clearTimeout(this.sessionsLoadingTimeout);
+      this.sessionsLoadingTimeout = null;
+    }
+
     this.sessionsLoading = true;
+
+    // Set timeout to reset loading state after 5 seconds
+    this.sessionsLoadingTimeout = setTimeout(() => {
+      this.sessionsLoading = false;
+      console.log("Session list request timed out");
+      Taro.showToast({
+        title: "获取会话列表超时",
+        icon: "none",
+      });
+    }, 5000);
+
     try {
       await this.wsService.send({ type: "session.list" });
     } catch (error) {
       console.error("Failed to request session list:", error);
       this.sessionsLoading = false;
+      if (this.sessionsLoadingTimeout) {
+        clearTimeout(this.sessionsLoadingTimeout);
+        this.sessionsLoadingTimeout = null;
+      }
     }
   };
 
@@ -287,7 +318,7 @@ class ChatStore {
   @action
   updateMessageStatus = (
     id: string,
-    status: "sending" | "sent" | "error" | "streaming"
+    status: "sending" | "sent" | "error" | "streaming",
   ) => {
     const message = this.messages.find((m) => m.id === id);
     if (message) {
@@ -351,8 +382,16 @@ class ChatStore {
     });
 
     this.wsService.onMessage((data: any) => {
-      console.log("Received message:", data);
+      // console.log("Received message:", data);
 
+      // Handle OpenClaw event messages
+      if (data.type === "event") {
+        // console.log("Handling event message:", data.event, data);
+        this.handleEventMessage(data);
+        return;
+      }
+
+      // Handle legacy progress/complete/error messages
       if (data.type === "progress") {
         const sessionKey = data.session || this.sessionId || "default";
         this.touchSession(sessionKey);
@@ -436,13 +475,20 @@ class ChatStore {
         // Mark user messages as read on error too
         this.setAllMessagesRead();
       } else if (data.type === "session.list") {
+        // Clear the loading timeout since we received a response
+        if (this.sessionsLoadingTimeout) {
+          clearTimeout(this.sessionsLoadingTimeout);
+          this.sessionsLoadingTimeout = null;
+        }
+
         const sessions = Array.isArray(data?.data?.sessions)
           ? data.data.sessions
           : [];
         const list = sessions
           .map((entry: any) => ({
             id: entry?.key || "",
-            updatedAt: typeof entry?.updatedAt === "number" ? entry.updatedAt : 0,
+            updatedAt:
+              typeof entry?.updatedAt === "number" ? entry.updatedAt : 0,
           }))
           .filter((entry: { id: string }) => Boolean(entry.id));
         if (list.length > 0) {
@@ -457,6 +503,158 @@ class ChatStore {
       }
     });
   }
+
+  @action
+  private handleEventMessage = (data: any) => {
+    const { event, payload } = data;
+
+    // Handle session list response
+    if (event === "session.list") {
+      // Clear the loading timeout since we received a response
+      if (this.sessionsLoadingTimeout) {
+        clearTimeout(this.sessionsLoadingTimeout);
+        this.sessionsLoadingTimeout = null;
+      }
+
+      const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
+      const list = sessions
+        .map((entry: any) => ({
+          id: entry?.key || "",
+          updatedAt: typeof entry?.updatedAt === "number" ? entry.updatedAt : 0,
+        }))
+        .filter((entry: { id: string }) => Boolean(entry.id));
+      if (list.length > 0) {
+        this.sessions = list;
+        if (!this.sessionId) {
+          this.setSessionId(list[0].id);
+        }
+      } else if (this.sessions.length === 0) {
+        this.rebuildSessionsFromMessages();
+      }
+      this.sessionsLoading = false;
+      return;
+    }
+
+    // Handle agent streaming events
+    if (event === "agent" && payload?.stream === "assistant") {
+      const runId = payload.runId;
+      const sessionKey = payload.sessionKey || this.sessionId || "default";
+      const delta = payload.data?.delta || "";
+      const fullText = payload.data?.text || delta;
+
+      // Check if this is a new conversation turn
+      if (runId && runId !== this.currentRunId) {
+        this.currentRunId = runId;
+        // Create a new message for this new turn
+        const newMessageId = `assistant_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        this.currentStreamingMessageId = newMessageId;
+        const assistantMessage: ChatMessage = {
+          id: newMessageId,
+          content: fullText,
+          role: "assistant",
+          timestamp: Date.now(),
+          status: "streaming",
+          session: sessionKey,
+        };
+        this.addMessage(assistantMessage);
+      } else if (this.currentStreamingMessageId) {
+        // Update existing streaming message - replace entire object for MobX reactivity
+        const msgIndex = this.messages.findIndex(
+          (m) => m.id === this.currentStreamingMessageId,
+        );
+        if (msgIndex >= 0) {
+          this.messages[msgIndex] = {
+            ...this.messages[msgIndex],
+            content: fullText,
+          };
+        }
+      }
+
+      this.touchSession(sessionKey);
+      this.setStreaming(true);
+      this.setCurrentStreamingMessage(fullText);
+
+      // Mark user messages as read when we receive a response
+      this.setAllMessagesRead();
+
+      if (sessionKey !== this.sessionId) {
+        this.setSessionId(sessionKey);
+      }
+      return;
+    }
+
+    // Handle chat events (streaming and final messages)
+    if (event === "chat" && payload?.message) {
+      const runId = payload.runId;
+      const sessionKey =
+        payload.sessionKey ||
+        payload.message?.session ||
+        this.sessionId ||
+        "default";
+      const messageContent = payload.message.content;
+      const state = payload.state; // "delta" for streaming, "final" for complete
+
+      // Extract text from content array
+      let text = "";
+      if (Array.isArray(messageContent)) {
+        text = messageContent
+          .filter((item: any) => item?.type === "text")
+          .map((item: any) => item?.text || "")
+          .join("");
+      } else if (typeof messageContent === "string") {
+        text = messageContent;
+      }
+
+      this.touchSession(sessionKey);
+
+      // Check if this is a new conversation turn (when we have a runId and it's different)
+      if (runId && runId !== this.currentRunId) {
+        this.currentRunId = runId;
+        // Create a new message for this new turn
+        const newMessageId = `assistant_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        this.currentStreamingMessageId = newMessageId;
+        const assistantMessage: ChatMessage = {
+          id: newMessageId,
+          content: text,
+          role: "assistant",
+          timestamp: payload.message?.timestamp || Date.now(),
+          status: "streaming",
+          session: sessionKey,
+        };
+        this.addMessage(assistantMessage);
+        this.setStreaming(true);
+      } else if (this.currentStreamingMessageId) {
+        // Update existing streaming message - replace entire object for MobX reactivity
+        const msgIndex = this.messages.findIndex(
+          (m) => m.id === this.currentStreamingMessageId,
+        );
+        if (msgIndex >= 0) {
+          this.messages[msgIndex] = {
+            ...this.messages[msgIndex],
+            content: text,
+            status: state === "final" ? "sent" : "streaming",
+          };
+        }
+      }
+
+      // Handle final state - stop streaming
+      if (state === "final") {
+        this.setStreaming(false);
+        this.currentStreamingMessageId = null;
+      } else {
+        this.setStreaming(true);
+        this.setCurrentStreamingMessage(text);
+      }
+
+      // Mark user messages as read when we receive a response
+      this.setAllMessagesRead();
+
+      if (sessionKey !== this.sessionId) {
+        this.setSessionId(sessionKey);
+      }
+      return;
+    }
+  };
 
   @action
   private touchSession = (id: string) => {
@@ -480,7 +678,10 @@ class ChatStore {
       if (!message.session) {
         return;
       }
-      const next = Math.max(seen.get(message.session) || 0, message.timestamp || 0);
+      const next = Math.max(
+        seen.get(message.session) || 0,
+        message.timestamp || 0,
+      );
       seen.set(message.session, next);
     });
     this.sessions = Array.from(seen.entries()).map(([id, updatedAt]) => ({

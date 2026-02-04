@@ -1,10 +1,9 @@
 import { Component } from "react";
-import { View, Text, Image } from "@tarojs/components";
+import { View, Text } from "@tarojs/components";
 
 interface ChatHeaderProps {
   connected: boolean;
-  connecting?: boolean;
-  onClear?: () => void;
+  streaming?: boolean;
   onSettings?: () => void;
   onToggleSidebar?: () => void;
   title?: string;
@@ -15,65 +14,69 @@ class ChatHeader extends Component<ChatHeaderProps> {
   render() {
     const {
       connected,
-      connecting,
-      onClear,
+      streaming = false,
       onSettings,
       onToggleSidebar,
       title = "OpenClaw",
-      subtitle = "AI 助手"
+      subtitle = "新会话",
     } = this.props;
 
     return (
-      <View className="flex items-center justify-between h-16 px-3 bg-[#F0F2F5] border-b border-[#D1D7DB] relative z-10">
+      <View className="flex items-center h-14 px-3 bg-[#F0F2F5] border-b border-[#E9EDEF] relative z-10">
         <View className="flex items-center gap-1">
           {onToggleSidebar && (
             <View
-              className="w-10 h-10 rounded-full flex items-center justify-center active:bg-[#D1D7DB] transition-colors"
+              className="w-9 h-9 rounded-full flex items-center justify-center active:bg-[#D1D7DB] transition-colors"
               onClick={onToggleSidebar}
             >
-              <Text className="text-[20px] text-[#54656F]">☰</Text>
+              <Text className="text-[18px] text-[#54656F]">☰</Text>
             </View>
           )}
-          <View
-            className="w-10 h-10 rounded-full flex items-center justify-center active:bg-[#D1D7DB] transition-colors"
-            onClick={onSettings}
-          >
-            <Text className="text-[20px] text-[#54656F]">⚙</Text>
-          </View>
         </View>
 
-        <View className="flex-1 flex items-center ml-2">
-          <View className="relative w-10 h-10 mr-3">
-            <View className="w-full h-full rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2] flex items-center justify-center shadow-sm">
-              <Text className="text-white text-[14px] font-bold">OC</Text>
+        <View className="flex-1 flex items-center justify-center">
+          <View className="flex flex-col items-center">
+            <View className="flex items-center gap-2">
+              <Text className="text-[16px] font-semibold text-[#111B21] leading-tight">
+                {title}
+              </Text>
+              {streaming && (
+                <View className="flex items-center gap-0.5">
+                  <View
+                    className="w-1 h-1 bg-[#00A884] rounded-full animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  />
+                  <View
+                    className="w-1 h-1 bg-[#00A884] rounded-full animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <View
+                    className="w-1 h-1 bg-[#00A884] rounded-full animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
+                </View>
+              )}
             </View>
-            <View
-              className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#F0F2F5] ${
-                connected ? "bg-[#25D366]" : "bg-[#8696A0]"
-              }`}
-            />
-          </View>
-          <View className="flex flex-col">
-            <Text className="text-[16px] font-bold text-[#111B21] leading-tight">
-              {title}
-            </Text>
-            <Text
-              className={`text-[12px] leading-tight mt-0.5 ${
-                connecting ? "text-[#00A884]" : "text-[#667781]"
-              }`}
-            >
-              {connecting ? "正在重新连接..." : connected ? subtitle : "离线"}
-            </Text>
+            {subtitle && (
+              <Text className="text-[12px] leading-tight mt-0.5 text-[#54656F]">
+                {subtitle}
+              </Text>
+            )}
           </View>
         </View>
 
-        <View className="flex items-center gap-1">
-          {onClear && (
+        <View className="flex items-center gap-2">
+          {connected && (
             <View
-              className="w-10 h-10 rounded-full flex items-center justify-center active:bg-[#D1D7DB] transition-colors"
-              onClick={onClear}
+              className={`w-2 h-2 rounded-full ${streaming ? "bg-[#00A884] animate-pulse" : "bg-[#25D366]"}`}
+            />
+          )}
+          {onSettings && (
+            <View
+              className="w-9 h-9 rounded-full flex items-center justify-center active:bg-[#D1D7DB] transition-colors"
+              onClick={onSettings}
             >
-              <Text className="text-[18px] text-[#54656F]">🗑</Text>
+              <Text className="text-[24px] text-[#54656F]">⋮</Text>
             </View>
           )}
         </View>

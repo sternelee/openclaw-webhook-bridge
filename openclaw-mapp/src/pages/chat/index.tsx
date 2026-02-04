@@ -5,7 +5,6 @@ import { observer, inject } from "mobx-react";
 import { ChatMessage as ChatMessageType } from "../../types/openclaw";
 import ChatHeader from "../../components/ChatHeader";
 import ChatInput from "../../components/ChatInput";
-import TypingIndicator from "../../components/TypingIndicator";
 import { MessageGroup } from "../../components/Message";
 import SettingsModal from "../../components/SettingsModal";
 
@@ -164,7 +163,7 @@ class Chat extends Component<ChatProps, ChatState> {
       messages: ChatMessageType[];
     }> = [];
 
-    let currentGroup: typeof groups[0] | null = null;
+    let currentGroup: (typeof groups)[0] | null = null;
 
     messages.forEach((message) => {
       if (!currentGroup || currentGroup.role !== message.role) {
@@ -188,7 +187,6 @@ class Chat extends Component<ChatProps, ChatState> {
       sessionList,
       sessionId,
       connected,
-      connecting,
       streaming,
       wsUrl,
       uid,
@@ -198,27 +196,24 @@ class Chat extends Component<ChatProps, ChatState> {
     const messageGroups = this.groupMessages(visibleMessages || []);
 
     return (
-      <View className="flex h-screen bg-[#F0F2F5]">
+      <View className="flex h-screen bg-[#ECE5DD]">
         <View className="flex flex-1 min-h-0">
           {/* Sidebar */}
-
           <View
-            className={`flex flex-col bg-[#111B21] text-[#D1D7DB] border-r border-[#222D34] transition-all duration-300 ease-in-out ${
-              sidebarOpen ? "w-[240px]" : "w-16"
+            className={`flex flex-col bg-[#111B21] text-[#D1D7DB] border-r border-[#2A3942] transition-all duration-300 ease-in-out overflow-hidden ${
+              sidebarOpen ? "w-[280px]" : "w-0"
             }`}
           >
-            <View className="flex flex-col items-center justify-between px-3 py-4 h-14 border-b border-[#222D34]">
-              <View className={`flex items-center w-full ${sidebarOpen ? "justify-between" : "justify-center"}`}>
-                <Text className={`${sidebarOpen ? "block" : "hidden"} text-[16px] font-bold tracking-tight text-[#E9EDEF]`}>
-                  会话列表
+            <View className="flex flex-col items-center justify-between px-4 py-3 h-14 bg-[#202C33]">
+              <View className="flex items-center w-full justify-between">
+                <Text className="text-[16px] font-semibold text-[#E9EDEF]">
+                  OpenClaw
                 </Text>
                 <View
-                  className="w-8 h-8 rounded-full flex items-center justify-center active:bg-[#2A3942] transition-colors"
+                  className="w-8 h-8 rounded-full flex items-center justify-center active:bg-[#37424F] transition-colors"
                   onClick={this.handleToggleSidebar}
                 >
-                  <Text className="text-[16px] text-[#A5B1B8]">
-                    {sidebarOpen ? "«" : "»"}
-                  </Text>
+                  <Text className="text-[16px] text-[#A5B1B8]">✕</Text>
                 </View>
               </View>
             </View>
@@ -230,73 +225,101 @@ class Chat extends Component<ChatProps, ChatState> {
                     sessionList.map((session: { id: string }) => (
                       <View
                         key={session.id}
-                        className={`flex items-center mx-2 my-1 px-3 py-3 rounded-xl transition-all ${
+                        className={`flex items-center mx-3 my-1 px-3 py-3 rounded-lg transition-all ${
                           sessionId === session.id
-                            ? "bg-[#2A3942] text-[#E9EDEF] shadow-sm"
-                            : "text-[#D1D7DB] active:bg-[#202C33]"
+                            ? "bg-[#2A3942] text-[#E9EDEF]"
+                            : "text-[#D1D7DB] active:bg-[#2A3942]"
                         }`}
-                        onClick={() => this.handleSelectSession(session.id)}
+                        onClick={() => {
+                          this.handleSelectSession(session.id);
+                          this.handleToggleSidebar(); // Close sidebar after selecting
+                        }}
                       >
-                        <View className="w-8 h-8 rounded-lg bg-[#202C33] flex items-center justify-center mr-3 shrink-0">
-                          <Text className="text-[14px]">💬</Text>
+                        <View className="w-10 h-10 rounded-full bg-[#00A884] flex items-center justify-center mr-3 shrink-0">
+                          <Text className="text-[16px]">💬</Text>
                         </View>
-                        <View className={`flex-1 min-w-0 ${sidebarOpen ? "block" : "hidden"}`}>
-                          <Text className="text-[14px] font-medium truncate">
+                        <View className="flex-1 min-w-0">
+                          <Text className="text-[14px] font-medium truncate text-[#E9EDEF]">
                             {session.id}
                           </Text>
-                          <Text className="text-[11px] text-[#8696A0] truncate">
-                            最近活动
+                          <Text className="text-[12px] text-[#8696A0] truncate">
+                            点击查看对话
                           </Text>
                         </View>
                       </View>
                     ))
                   ) : (
-                    <View className="px-4 py-8 flex flex-col items-center justify-center">
-                      <Text className="text-[24px] mb-2 opacity-20">📭</Text>
-                      <Text className={`${sidebarOpen ? "block" : "hidden"} text-[13px] text-[#8696A0] text-center`}>
-                        暂无活跃会话
+                    <View className="py-8 flex flex-col items-center justify-center">
+                      <Text className="text-[32px] mb-2 opacity-30">💬</Text>
+                      <Text className="text-[13px] text-[#8696A0] text-center">
+                        暂无会话记录
                       </Text>
                     </View>
                   )}
                 </View>
               </ScrollView>
 
-              {/* Sidebar Footer */}
-              <View className="p-3 border-t border-[#222D34]">
+              {/* Create New Session Button */}
+              <View className="px-3 py-2 border-t border-[#2A3942]">
                 <View
-                  className={`flex items-center rounded-xl p-2 active:bg-[#2A3942] transition-colors ${
-                    sidebarOpen ? "justify-start" : "justify-center"
-                  }`}
+                  className="flex items-center rounded-lg px-3 py-2.5 active:bg-[#2A3942] transition-colors justify-start"
+                  onClick={() => {
+                    const { chatStore } = this.props;
+                    chatStore.setSessionId("");
+                    this.handleToggleSidebar();
+                  }}
+                >
+                  <View className="w-9 h-9 rounded-full flex items-center justify-center bg-[#00A884] mr-3">
+                    <Text className="text-[18px] text-white font-light">+</Text>
+                  </View>
+                  <Text className="text-[14px] font-medium text-[#E9EDEF]">
+                    新会话
+                  </Text>
+                </View>
+              </View>
+
+              {/* Sidebar Footer */}
+              <View className="p-3 border-t border-[#2A3942] space-y-1">
+                <View
+                  className="flex items-center rounded-lg px-3 py-2 active:bg-[#2A3942] transition-colors justify-start"
+                  onClick={this.handleClearHistory}
+                >
+                  <View className="w-9 h-9 rounded-full flex items-center justify-center bg-[#37424F] mr-3">
+                    <Text className="text-[16px] text-[#E9EDEF]">🗑</Text>
+                  </View>
+                  <Text className="text-[14px] text-[#D1D7DB]">清空对话</Text>
+                </View>
+                <View
+                  className="flex items-center rounded-lg px-3 py-2 active:bg-[#2A3942] transition-colors justify-start"
                   onClick={() => chatStore?.requestSessionList?.()}
                 >
-                  <View className={`w-8 h-8 rounded-full flex items-center justify-center bg-[#202C33] ${sidebarOpen ? "mr-3" : ""}`}>
-                    <Text className={`text-[16px] text-[#A5B1B8] ${sessionsLoading ? "animate-spin" : ""}`}>
+                  <View className="w-9 h-9 rounded-full flex items-center justify-center bg-[#37424F] mr-3">
+                    <Text
+                      className={`text-[16px] text-[#8696A0] ${sessionsLoading ? "animate-spin" : ""}`}
+                    >
                       ⟳
                     </Text>
                   </View>
-                  {sidebarOpen && (
-                    <Text className="text-[13px] font-medium text-[#D1D7DB]">刷新列表</Text>
-                  )}
+                  <Text className="text-[14px] text-[#D1D7DB]">刷新列表</Text>
                 </View>
               </View>
             </View>
           </View>
 
           {/* Main */}
-          <View className="flex flex-col flex-1 min-w-0">
+          <View className="flex flex-col flex-1 min-w-0 bg-[#ECE5DD]">
             {/* Header */}
             <ChatHeader
               connected={connected}
-              connecting={connecting}
-              onClear={this.handleClearHistory}
+              streaming={streaming}
               onSettings={this.handleOpenSettings}
               onToggleSidebar={this.handleToggleSidebar}
-              subtitle={sessionId ? `当前会话: ${sessionId}` : "AI 助手"}
+              subtitle={sessionId ? sessionId : "新会话"}
             />
 
             {/* Messages */}
             <ScrollView
-              className="flex-1 relative z-[1] px-4 py-3"
+              className="flex-1 relative z-[1] py-3 overflow-hidden"
               scrollY
               scrollIntoView="bottom"
               ref={(ref: any) => {
@@ -315,27 +338,20 @@ class Chat extends Component<ChatProps, ChatState> {
                   ))
                 ) : (
                   <View className="flex-1 flex flex-col items-center justify-center py-20 px-6">
-                    <View className="w-24 h-24 rounded-full bg-white flex items-center justify-center mb-6 shadow-sm">
-                      <Text className="text-[48px]">🤖</Text>
+                    <View className="w-20 h-20 rounded-full bg-[#00A884] flex items-center justify-center mb-5">
+                      <Text className="text-[36px]">🤖</Text>
                     </View>
-                    <Text className="text-[20px] font-bold text-[#111B21] mb-2">
-                      欢迎使用 OpenClaw
+                    <Text className="text-[18px] font-semibold text-[#111B21] mb-2">
+                      OpenClaw AI
                     </Text>
-                    <Text className="text-[14px] text-[#667781] text-center max-w-[240px]">
-                      您可以选择一个现有会话，或者直接输入消息开始新的对话。
+                    <Text className="text-[14px] text-[#54656F] text-center max-w-[260px]">
+                      开始新对话，或从侧边栏选择历史会话
                     </Text>
                   </View>
                 )}
                 <View id="bottom" />
               </View>
             </ScrollView>
-
-            {/* Typing indicator */}
-            {streaming && (
-              <View className="relative z-[2] px-4 pb-2">
-                <TypingIndicator text="OpenClaw 正在思考..." />
-              </View>
-            )}
 
             {/* Input */}
             <ChatInput

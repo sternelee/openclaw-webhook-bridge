@@ -16,6 +16,9 @@ export class WebSocketService {
   private reconnectDelay: number = 3000;
   private messageHandlers: ((data: any) => void)[] = [];
   private statusHandlers: ((status: WebSocketStatus) => void)[] = [];
+  private connectionState: WebSocketStatus = "disconnected";
+  private connectResolve: (() => void) | null = null;
+  private connectReject: ((error: any) => void) | null = null;
 
   constructor(url: string = "") {
     this.url = url;
@@ -47,6 +50,7 @@ export class WebSocketService {
   }
 
   private notifyStatus(status: WebSocketStatus) {
+    this.connectionState = status;
     this.statusHandlers.forEach((handler) => handler(status));
   }
 
@@ -64,23 +68,30 @@ export class WebSocketService {
       }
 
       if (
-        this.ws &&
-        (this.ws.readyState === WebSocket.CONNECTING ||
-          this.ws.readyState === WebSocket.OPEN)
+        this.connectionState === "connected" ||
+        this.connectionState === "connecting"
       ) {
-        resolve();
+        if (this.connectionState === "connected") {
+          resolve();
+        } else {
+          // Already connecting, store the resolve/reject for when current connection completes
+          this.connectResolve = resolve;
+          this.connectReject = reject;
+        }
         return;
       }
 
+      this.connectResolve = resolve;
+      this.connectReject = reject;
       this.notifyStatus("connecting");
 
       try {
         this.ws = Taro.connectSocket({
           url: this.getUrlWithUid(),
-          protocols: ["echo-protocol"],
         });
 
-        this.ws.onOpen(() => {
+        // Use Taro's global event handlers for WeChat mini-program
+        Taro.onSocketOpen(() => {
           console.log("WebSocket connected");
           this.reconnectAttempts = 0;
           if (this.reconnectTimer) {
@@ -88,11 +99,15 @@ export class WebSocketService {
             this.reconnectTimer = null;
           }
           this.notifyStatus("connected");
-          resolve();
+          if (this.connectResolve) {
+            this.connectResolve();
+            this.connectResolve = null;
+            this.connectReject = null;
+          }
         });
 
-        this.ws.onMessage((msg: any) => {
-          console.log("WebSocket message received:", msg.data);
+        Taro.onSocketMessage((msg: any) => {
+          // console.log("WebSocket message received:", msg.data);
           try {
             const data = JSON.parse(msg.data);
             this.notifyMessage(data);
@@ -102,22 +117,35 @@ export class WebSocketService {
           }
         });
 
-        this.ws.onError((error: any) => {
+        Taro.onSocketError((error: any) => {
           console.error("WebSocket error:", error);
           this.notifyStatus("error");
-          reject(error);
+          if (this.connectReject) {
+            this.connectReject(error);
+            this.connectResolve = null;
+            this.connectReject = null;
+          }
         });
 
-        this.ws.onClose(() => {
+        Taro.onSocketClose(() => {
           console.log("WebSocket closed");
+          const wasConnected = this.connectionState === "connected";
           this.notifyStatus("disconnected");
           this.ws = null;
 
+          if (this.connectReject && !wasConnected) {
+            this.connectReject(
+              new Error("Connection closed before established"),
+            );
+            this.connectResolve = null;
+            this.connectReject = null;
+          }
+
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
-            console.log(
-              `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`,
-            );
+            // console.log(
+            //   `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`,
+            // );
             this.reconnectTimer = setTimeout(() => {
               this.connect().catch(console.error);
             }, this.reconnectDelay);
@@ -126,24 +154,28 @@ export class WebSocketService {
       } catch (error) {
         console.error("Failed to create WebSocket:", error);
         this.notifyStatus("error");
-        reject(error);
+        if (this.connectReject) {
+          this.connectReject(error);
+          this.connectResolve = null;
+          this.connectReject = null;
+        }
       }
     });
   }
 
   send(data: any): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      if (this.connectionState !== "connected") {
         reject(new Error("WebSocket is not connected"));
         return;
       }
 
       try {
         const message = typeof data === "string" ? data : JSON.stringify(data);
-        this.ws.send({
+        Taro.sendSocketMessage({
           data: message,
           success: () => {
-            console.log("Message sent:", message);
+            // console.log("Message sent:", message);
             resolve();
           },
           fail: (error: any) => {
@@ -165,7 +197,7 @@ export class WebSocketService {
     }
 
     if (this.ws) {
-      this.ws.close();
+      Taro.closeSocket();
       this.ws = null;
     }
 
@@ -174,23 +206,11 @@ export class WebSocketService {
   }
 
   getStatus(): WebSocketStatus {
-    if (!this.ws) return "disconnected";
-
-    switch (this.ws.readyState) {
-      case WebSocket.CONNECTING:
-        return "connecting";
-      case WebSocket.OPEN:
-        return "connected";
-      case WebSocket.CLOSING:
-      case WebSocket.CLOSED:
-        return "disconnected";
-      default:
-        return "disconnected";
-    }
+    return this.connectionState;
   }
 
   isConnected(): boolean {
-    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+    return this.connectionState === "connected";
   }
 }
 

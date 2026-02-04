@@ -1,14 +1,9 @@
 export default {
-  pages: [
-    "pages/chat/index",
-    "pages/welcome/index",
-    "pages/settings/index",
-    "pages/index/index",
-  ],
+  pages: ["pages/chat/index"],
   window: {
     backgroundTextStyle: "light",
     navigationBarBackgroundColor: "#fff",
-    navigationBarTitleText: "OpenClaw",
+    navigationBarTitleText: "OpenClaw Run",
     navigationBarTextStyle: "black",
   },
   usingComponents: {

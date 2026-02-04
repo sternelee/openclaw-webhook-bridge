@@ -27,24 +27,25 @@ class ChatInput extends Component<ChatInputProps> {
     const canSend = value.trim().length > 0 && !disabled;
 
     return (
-      <View className="flex flex-col px-3 pb-6 pt-3 bg-[#F0F2F5] border-t border-[#D1D7DB] relative z-10">
+      <View className="flex flex-col px-2 pb-3 pt-2 bg-[#F0F2F5] relative z-10">
         <View className="flex items-end gap-2 w-full">
           {/* Voice button */}
           {onVoice && !disabled && (
             <View
-              className="w-10 h-10 rounded-full flex items-center justify-center text-[#54656F] active:bg-[#D1D7DB] transition-colors"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-[#54656F] active:bg-[#D1D7DB] transition-colors"
               onClick={onVoice}
             >
-              <Text className="text-[20px]">🎤</Text>
+              <Text className="text-[18px]">🎤</Text>
             </View>
           )}
 
           {/* Text input container */}
-          <View className="flex-1 flex flex-col bg-white rounded-[20px] px-4 py-2 shadow-sm border border-[#E9EDEF]">
+          <View className="flex-1 flex flex-col bg-white rounded-[20px] px-3 py-1.5 shadow-sm">
             <Input
-              className="w-full min-h-[24px] text-[16px] text-[#111B21] bg-transparent"
+              className="w-full min-h-[20px] text-[15px] text-[#111B21] bg-transparent"
               type="text"
               placeholder={placeholder}
+              placeholderClass="text-[#8696A0]"
               value={value}
               maxlength={maxLength}
               disabled={disabled}
@@ -59,19 +60,19 @@ class ChatInput extends Component<ChatInputProps> {
           {/* Send or Attachment button */}
           {canSend ? (
             <View
-              className="w-10 h-10 rounded-full flex items-center justify-center bg-[#00A884] shadow-sm active:bg-[#008F6F] transition-all"
+              className="w-9 h-9 rounded-full flex items-center justify-center bg-[#00A884] active:bg-[#008F6F] transition-all"
               onClick={onSend}
             >
-              <Text className="text-white text-[20px] ml-0.5">➤</Text>
+              <Text className="text-white text-[16px] ml-0.5">➤</Text>
             </View>
           ) : (
             <View
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-[#54656F] transition-colors ${
+              className={`w-9 h-9 rounded-full flex items-center justify-center text-[#54656F] transition-colors ${
                 disabled ? "opacity-30" : "active:bg-[#D1D7DB]"
               }`}
               onClick={disabled ? undefined : onAttachment}
             >
-              <Text className="text-[22px]">{onAttachment ? "⊕" : "💬"}</Text>
+              <Text className="text-[20px]">{onAttachment ? "⊕" : "😊"}</Text>
             </View>
           )}
         </View>
