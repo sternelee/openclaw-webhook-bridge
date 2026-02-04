@@ -159,7 +159,7 @@ func (c *Client) connectAndRead() error {
 			return fmt.Errorf("read error: %w", err)
 		}
 
-		log.Printf("[OpenClaw] Received: %s", string(message))
+		// Don't log message content for privacy
 
 		// Forward raw event to callback
 		if c.onEvent != nil {
@@ -221,7 +221,7 @@ func (c *Client) SendRaw(data []byte) error {
 		return fmt.Errorf("connection lost")
 	}
 
-	log.Printf("[OpenClaw] Sending: %s", string(data))
+	// Don't log message content for privacy
 
 	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 		return fmt.Errorf("failed to send: %w", err)

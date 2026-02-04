@@ -158,7 +158,7 @@ func (c *Client) connectAndRead() error {
 			return fmt.Errorf("read error: %w", err)
 		}
 
-		log.Printf("[Webhook] Received: %s", string(message))
+		// Don't log message content for privacy - message content may be sensitive
 
 		// Call handler with raw JSON bytes
 		if c.handler != nil {
@@ -179,7 +179,7 @@ func (c *Client) Send(data []byte) error {
 		return fmt.Errorf("not connected")
 	}
 
-	log.Printf("[Webhook] Sending: %s", string(data))
+	// Don't log message content for privacy
 
 	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 		return fmt.Errorf("failed to send: %w", err)
