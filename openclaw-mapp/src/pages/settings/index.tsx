@@ -45,6 +45,39 @@ class Settings extends Component<SettingsProps> {
     this.uidInput = e.detail.value;
   };
 
+  handleScan = async () => {
+    try {
+      const res = await Taro.scanCode({
+        scanType: ["qrCode"],
+      });
+      const raw = (res?.result || "").trim();
+      if (!raw) {
+        Taro.showToast({ title: "二维码内容为空", icon: "none" });
+        return;
+      }
+      let parsed: { wsUrl?: string; uid?: string } | null = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || (!parsed.wsUrl && !parsed.uid)) {
+        Taro.showToast({ title: "二维码格式不支持", icon: "none" });
+        return;
+      }
+      if (parsed.wsUrl) {
+        this.wsUrlInput = parsed.wsUrl;
+      }
+      if (parsed.uid) {
+        this.uidInput = parsed.uid;
+      }
+      this.forceUpdate();
+      Taro.showToast({ title: "已识别二维码", icon: "success" });
+    } catch (error) {
+      Taro.showToast({ title: "扫码失败", icon: "none" });
+    }
+  };
+
   handlePeerKindChange = (e: any) => {
     this.peerKindInput = e.detail.value;
   };
@@ -220,6 +253,12 @@ class Settings extends Component<SettingsProps> {
                 onInput={this.handleUidChange}
               />
             </View>
+            <Button
+              className="w-full h-12 rounded-full text-[17px] font-medium bg-[#F0F2F5] text-[#111B21] active:bg-[#E9EDEF] mb-4"
+              onClick={this.handleScan}
+            >
+              扫码填入
+            </Button>
             <View className="mb-4">
               <Text className="block text-[15px] text-[#667781] mb-2 font-medium">
                 话题/会话路由（可选）

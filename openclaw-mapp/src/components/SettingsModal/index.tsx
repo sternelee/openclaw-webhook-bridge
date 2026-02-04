@@ -79,6 +79,36 @@ class SettingsModal extends Component<SettingsModalProps, SettingsModalState> {
     });
   };
 
+  handleScan = async () => {
+    try {
+      const res = await Taro.scanCode({
+        scanType: ["qrCode"],
+      });
+      const raw = (res?.result || "").trim();
+      if (!raw) {
+        Taro.showToast({ title: "二维码内容为空", icon: "none" });
+        return;
+      }
+      let parsed: { wsUrl?: string; uid?: string } | null = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || (!parsed.wsUrl && !parsed.uid)) {
+        Taro.showToast({ title: "二维码格式不支持", icon: "none" });
+        return;
+      }
+      this.setState({
+        inputUrl: parsed.wsUrl ?? this.state.inputUrl,
+        inputUid: parsed.uid ?? this.state.inputUid,
+      });
+      Taro.showToast({ title: "已识别二维码", icon: "success" });
+    } catch (error) {
+      Taro.showToast({ title: "扫码失败", icon: "none" });
+    }
+  };
+
   handleClear = () => {
     this.setState({ inputUrl: "", inputUid: "" });
   };
@@ -142,6 +172,13 @@ class SettingsModal extends Component<SettingsModalProps, SettingsModalState> {
                 用于标识用户身份，服务器将根据 UID 路由消息
               </Text>
             </View>
+
+            <Button
+              className="w-full h-12 rounded-full text-[16px] font-medium bg-[#F0F2F5] text-[#111B21] active:bg-[#E9EDEF]"
+              onClick={this.handleScan}
+            >
+              扫码填入
+            </Button>
 
             <View className="bg-[#F0F2F5] rounded-xl p-3.5 mt-4">
               <Text className="block text-[15px] text-[#111B21] mb-[10px] font-medium">
