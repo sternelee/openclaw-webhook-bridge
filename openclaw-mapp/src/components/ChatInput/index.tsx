@@ -27,24 +27,22 @@ class ChatInput extends Component<ChatInputProps> {
     const canSend = value.trim().length > 0 && !disabled;
 
     return (
-      <View className="flex items-end px-3 pb-3 pt-2 bg-white border-t border-[#E9EDEF] relative z-10">
+      <View className="flex flex-col px-3 pb-6 pt-3 bg-[#F0F2F5] border-t border-[#D1D7DB] relative z-10">
         <View className="flex items-end gap-2 w-full">
-          {/* Attachment button */}
-          {onAttachment && (
+          {/* Voice button */}
+          {onVoice && !disabled && (
             <View
-              className={`w-11 h-11 rounded-full flex items-center justify-center text-[#8696A0] ${
-                disabled ? "opacity-50" : "active:bg-[#F0F2F5]"
-              }`}
-              onClick={disabled ? undefined : onAttachment}
+              className="w-10 h-10 rounded-full flex items-center justify-center text-[#54656F] active:bg-[#D1D7DB] transition-colors"
+              onClick={onVoice}
             >
-              <Text className="text-[18px]">📎</Text>
+              <Text className="text-[20px]">🎤</Text>
             </View>
           )}
 
-          {/* Text input */}
-          <View className="flex-1 flex flex-col bg-[#F0F2F5] rounded-full px-4 py-2 relative">
+          {/* Text input container */}
+          <View className="flex-1 flex flex-col bg-white rounded-[20px] px-4 py-2 shadow-sm border border-[#E9EDEF]">
             <Input
-              className="w-full text-[16px] leading-[1.4] text-[#111B21] bg-transparent"
+              className="w-full min-h-[24px] text-[16px] text-[#111B21] bg-transparent"
               type="text"
               placeholder={placeholder}
               value={value}
@@ -53,33 +51,29 @@ class ChatInput extends Component<ChatInputProps> {
               onInput={(e) => onInput(e.detail.value)}
               confirmType="send"
               onConfirm={canSend ? onSend : undefined}
+              adjustPosition
+              cursorSpacing={20}
             />
-            <Text className="text-[11px] text-[#8696A0] self-end absolute bottom-0 right-4">
-              {value.length}/{maxLength}
-            </Text>
           </View>
 
-          {/* Voice button when input is empty */}
-          {onVoice && value.trim().length === 0 && !disabled && (
+          {/* Send or Attachment button */}
+          {canSend ? (
             <View
-              className="w-11 h-11 rounded-full flex items-center justify-center text-[#8696A0] active:bg-[#F0F2F5]"
-              onClick={onVoice}
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-[#00A884] shadow-sm active:bg-[#008F6F] transition-all"
+              onClick={onSend}
             >
-              <Text className="text-[18px]">🎤</Text>
+              <Text className="text-white text-[20px] ml-0.5">➤</Text>
+            </View>
+          ) : (
+            <View
+              className={`w-10 h-10 rounded-full flex items-center justify-center text-[#54656F] transition-colors ${
+                disabled ? "opacity-30" : "active:bg-[#D1D7DB]"
+              }`}
+              onClick={disabled ? undefined : onAttachment}
+            >
+              <Text className="text-[22px]">{onAttachment ? "⊕" : "💬"}</Text>
             </View>
           )}
-
-          {/* Send button */}
-          <View
-            className={`w-11 h-11 rounded-full flex items-center justify-center ${
-              canSend
-                ? "bg-[#00A884] text-white active:bg-[#008F6F]"
-                : "bg-[#F0F2F5] text-[#8696A0] active:bg-[#E9EDEF]"
-            }`}
-            onClick={canSend ? onSend : undefined}
-          >
-            <Text className="text-[28px] -rotate-45">➤</Text>
-          </View>
         </View>
       </View>
     );

@@ -198,66 +198,88 @@ class Chat extends Component<ChatProps, ChatState> {
     const messageGroups = this.groupMessages(visibleMessages || []);
 
     return (
-      <View className="flex h-screen bg-[#E5DDD5]">
+      <View className="flex h-screen bg-[#F0F2F5]">
         <View className="flex flex-1 min-h-0">
           {/* Sidebar */}
+
           <View
-            className={`flex flex-col bg-[#0F1316] text-[#D1D7DB] border-r border-[#1C242A] transition-all duration-200 ${
-              sidebarOpen ? "w-[220px]" : "w-12"
+            className={`flex flex-col bg-[#111B21] text-[#D1D7DB] border-r border-[#222D34] transition-all duration-300 ease-in-out ${
+              sidebarOpen ? "w-[240px]" : "w-16"
             }`}
           >
-            <View className="flex items-center justify-between px-3 py-2 border-b border-[#1C242A]">
-              <Text className={`${sidebarOpen ? "block" : "hidden"} text-[14px] font-semibold tracking-[0.5px] text-[#F1F6F9]`}>
-                会话
-              </Text>
-              <View className="flex items-center gap-1.5">
+            <View className="flex flex-col items-center justify-between px-3 py-4 h-14 border-b border-[#222D34]">
+              <View className={`flex items-center w-full ${sidebarOpen ? "justify-between" : "justify-center"}`}>
+                <Text className={`${sidebarOpen ? "block" : "hidden"} text-[16px] font-bold tracking-tight text-[#E9EDEF]`}>
+                  会话列表
+                </Text>
                 <View
-                  className="w-7 h-7 rounded-md flex items-center justify-center active:bg-[#1C242A]"
-                  onClick={() => chatStore?.requestSessionList?.()}
-                >
-                  <Text
-                    className={`text-[14px] text-[#A5B1B8] ${
-                      sessionsLoading ? "animate-spin" : ""
-                    }`}
-                  >
-                    ⟳
-                  </Text>
-                </View>
-                <View
-                  className="w-7 h-7 rounded-md flex items-center justify-center active:bg-[#1C242A]"
+                  className="w-8 h-8 rounded-full flex items-center justify-center active:bg-[#2A3942] transition-colors"
                   onClick={this.handleToggleSidebar}
                 >
-                  <Text className="text-[14px] text-[#A5B1B8]">
+                  <Text className="text-[16px] text-[#A5B1B8]">
                     {sidebarOpen ? "«" : "»"}
                   </Text>
                 </View>
               </View>
             </View>
-            <ScrollView className="flex-1 min-h-0" scrollY>
-              {(sessionList || []).length > 0 ? (
-                sessionList.map((session: { id: string }) => (
-                  <View
-                    key={session.id}
-                    className={`px-3 py-2 text-[13px] border-b border-[#1C242A] ${
-                      sessionId === session.id
-                        ? "bg-[#1B2A34] text-white"
-                        : "text-[#D1D7DB] active:bg-[#1C242A]"
-                    }`}
-                    onClick={() => this.handleSelectSession(session.id)}
-                  >
-                    <Text className={`${sidebarOpen ? "block" : "hidden"} truncate`}>
-                      {session.id}
+
+            <View className="flex-1 flex flex-col min-h-0">
+              <ScrollView className="flex-1 no-scrollbar" scrollY>
+                <View className="py-2">
+                  {(sessionList || []).length > 0 ? (
+                    sessionList.map((session: { id: string }) => (
+                      <View
+                        key={session.id}
+                        className={`flex items-center mx-2 my-1 px-3 py-3 rounded-xl transition-all ${
+                          sessionId === session.id
+                            ? "bg-[#2A3942] text-[#E9EDEF] shadow-sm"
+                            : "text-[#D1D7DB] active:bg-[#202C33]"
+                        }`}
+                        onClick={() => this.handleSelectSession(session.id)}
+                      >
+                        <View className="w-8 h-8 rounded-lg bg-[#202C33] flex items-center justify-center mr-3 shrink-0">
+                          <Text className="text-[14px]">💬</Text>
+                        </View>
+                        <View className={`flex-1 min-w-0 ${sidebarOpen ? "block" : "hidden"}`}>
+                          <Text className="text-[14px] font-medium truncate">
+                            {session.id}
+                          </Text>
+                          <Text className="text-[11px] text-[#8696A0] truncate">
+                            最近活动
+                          </Text>
+                        </View>
+                      </View>
+                    ))
+                  ) : (
+                    <View className="px-4 py-8 flex flex-col items-center justify-center">
+                      <Text className="text-[24px] mb-2 opacity-20">📭</Text>
+                      <Text className={`${sidebarOpen ? "block" : "hidden"} text-[13px] text-[#8696A0] text-center`}>
+                        暂无活跃会话
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </ScrollView>
+
+              {/* Sidebar Footer */}
+              <View className="p-3 border-t border-[#222D34]">
+                <View
+                  className={`flex items-center rounded-xl p-2 active:bg-[#2A3942] transition-colors ${
+                    sidebarOpen ? "justify-start" : "justify-center"
+                  }`}
+                  onClick={() => chatStore?.requestSessionList?.()}
+                >
+                  <View className={`w-8 h-8 rounded-full flex items-center justify-center bg-[#202C33] ${sidebarOpen ? "mr-3" : ""}`}>
+                    <Text className={`text-[16px] text-[#A5B1B8] ${sessionsLoading ? "animate-spin" : ""}`}>
+                      ⟳
                     </Text>
                   </View>
-                ))
-              ) : (
-                <View className="px-3 py-4">
-                  <Text className={`${sidebarOpen ? "block" : "hidden"} text-[12px] text-[#7E8B91]`}>
-                    暂无会话
-                  </Text>
+                  {sidebarOpen && (
+                    <Text className="text-[13px] font-medium text-[#D1D7DB]">刷新列表</Text>
+                  )}
                 </View>
-              )}
-            </ScrollView>
+              </View>
+            </View>
           </View>
 
           {/* Main */}
@@ -292,13 +314,15 @@ class Chat extends Component<ChatProps, ChatState> {
                     />
                   ))
                 ) : (
-                  <View className="flex flex-col items-center justify-center py-20 px-10 gap-4 relative z-[1]">
-                    <View className="text-[64px] opacity-60 mb-2">💬</View>
-                    <Text className="text-[18px] font-medium text-[#667781]">
-                      开始新的对话
+                  <View className="flex-1 flex flex-col items-center justify-center py-20 px-6">
+                    <View className="w-24 h-24 rounded-full bg-white flex items-center justify-center mb-6 shadow-sm">
+                      <Text className="text-[48px]">🤖</Text>
+                    </View>
+                    <Text className="text-[20px] font-bold text-[#111B21] mb-2">
+                      欢迎使用 OpenClaw
                     </Text>
-                    <Text className="text-[15px] text-[#8696A0]">
-                      输入消息开始聊天
+                    <Text className="text-[14px] text-[#667781] text-center max-w-[240px]">
+                      您可以选择一个现有会话，或者直接输入消息开始新的对话。
                     </Text>
                   </View>
                 )}

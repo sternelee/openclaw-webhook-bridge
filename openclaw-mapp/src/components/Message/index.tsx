@@ -33,71 +33,68 @@ class MessageBubble extends Component<MessageBubbleProps> {
     return (
       <View
         className={[
-          "flex max-w-[80%] mb-[2px]",
-          isGrouped ? "mb-[1px]" : "",
+          "flex max-w-[85%] mb-2",
+          isGrouped ? "mt-[-4px]" : "mt-2",
           isUser ? "flex-row-reverse ml-auto" : "flex-row mr-auto",
         ]
           .filter(Boolean)
           .join(" ")}
       >
         {showAvatar && !isUser && (
-          <View className="w-9 h-9 rounded-full overflow-hidden mr-2 shrink-0 shadow">
-            <Image
-              src="https://via.placeholder.com/36/667eea/ffffff?text=AI"
-              className="w-full h-full"
-              lazyLoad
-            />
+          <View className="w-8 h-8 rounded-full overflow-hidden mr-2 shrink-0 shadow-sm border border-white">
+            <View className="w-full h-full bg-gradient-to-br from-[#667eea] to-[#764ba2] flex items-center justify-center">
+              <Text className="text-white text-[10px] font-bold">AI</Text>
+            </View>
           </View>
         )}
+        {!showAvatar && !isUser && <View className="w-8 mr-2 shrink-0" />}
 
         <View
           className={[
-            "relative px-3 py-2 rounded-xl min-w-[60px] max-w-full shadow",
+            "relative px-3 py-2 rounded-2xl max-w-full shadow-sm",
             isUser
-              ? `bg-[#DCF8C6] text-[#111B21] rounded-br-[2px] ${
-                  isGrouped ? "rounded-tr-[2px]" : ""
+              ? `bg-[#E7FFDB] text-[#111B21] rounded-tr-none ${
+                  isGrouped ? "rounded-tr-2xl" : ""
                 }`
-              : `bg-white text-[#111B21] rounded-bl-[2px] ${
-                  isGrouped ? "rounded-tl-[2px]" : ""
+              : `bg-white text-[#111B21] rounded-tl-none ${
+                  isGrouped ? "rounded-tl-2xl" : ""
                 }`,
-            isError ? "bg-[#FFF0F0] border border-[#FFCCC7]" : "",
+            isError ? "bg-[#FFF0F0] border border-[#FFCCC7] shadow-none" : "",
           ]
             .filter(Boolean)
             .join(" ")}
         >
           {/* Status indicator for sending messages */}
           {message.status === "sending" && (
-            <View className="flex items-center mb-1">
-              <View className="tw-dot tw-bounce-1 mx-[2px]" />
-              <View className="tw-dot tw-bounce-2 mx-[2px]" />
-              <View className="tw-dot tw-bounce-3 mx-[2px]" />
+            <View className="flex items-center mb-1 opacity-60">
+              <View className="tw-dot tw-bounce-1 mx-[1px] w-1.5 h-1.5 bg-[#8696A0] rounded-full" />
+              <View className="tw-dot tw-bounce-2 mx-[1px] w-1.5 h-1.5 bg-[#8696A0] rounded-full" />
+              <View className="tw-dot tw-bounce-3 mx-[1px] w-1.5 h-1.5 bg-[#8696A0] rounded-full" />
             </View>
           )}
 
           {/* Error indicator */}
           {isError && (
             <View className="flex items-center mb-1">
-              <Text className="flex items-center justify-center w-4 h-4 rounded-full bg-[#EA868F] text-white text-[10px] font-bold">
-                !
-              </Text>
+              <Text className="text-[#EA868F] text-[12px] font-medium">发送失败</Text>
             </View>
           )}
 
           {/* Message content */}
-          <Text className="text-[16px] leading-[1.4] whitespace-pre-wrap break-words text-[#111B21]">
+          <Text className="text-[15.5px] leading-[1.5] whitespace-pre-wrap break-words text-[#111B21]">
             {message.content}
-            {isStreaming && <Text className="ml-[2px] tw-blink">▋</Text>}
+            {isStreaming && <Text className="ml-[2px] text-[#00A884] animate-pulse">▋</Text>}
           </Text>
 
-          {/* Timestamp */}
+          {/* Timestamp and ticks */}
           <View className="flex items-center justify-end gap-1 mt-1">
-            <Text className="text-[11px] text-[#667781]">
+            <Text className="text-[10px] text-[#8696A0]">
               {formatTime(message.timestamp)}
             </Text>
             {isUser && message.status === "sent" && (
               <Text
-                className={`text-[11px] ${
-                  message.read ? "text-[#34B7F1]" : "text-[#53BDEB]"
+                className={`text-[12px] font-bold ${
+                  message.read ? "text-[#53BDEB]" : "text-[#8696A0]"
                 }`}
               >
                 {message.read ? "✓✓" : "✓"}
