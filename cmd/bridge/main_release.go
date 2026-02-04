@@ -1,4 +1,4 @@
-//go:build !release
+//go:build release
 
 package main
 
@@ -34,7 +34,7 @@ func main() {
 	switch cmd {
 	case "start":
 		applyConfigArgs(os.Args[2:])
-		cmdStart()
+		cmdStartRelease()
 	case "stop":
 		cmdStop()
 	case "status":
@@ -53,26 +53,26 @@ func main() {
 			}
 			os.Remove(pidPath)
 		}
-		cmdStart()
+		cmdStartRelease()
 	case "run":
 		if len(os.Args) > 2 {
 			applyConfigArgs(os.Args[2:])
 		}
-		cmdRun()
+		cmdRunRelease()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\nUsage:\n  openclaw-bridge start [webhook_url=ws://...]\n  openclaw-bridge stop\n  openclaw-bridge status\n  openclaw-bridge restart\n  openclaw-bridge run\n", cmd)
 		os.Exit(1)
 	}
 }
 
-func cmdStart() {
+// cmdStartRelease starts the bridge without logging to file (release build)
+func cmdStartRelease() {
 	dir, err := config.Dir()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	pidPath := filepath.Join(dir, "bridge.pid")
-	logPath := filepath.Join(dir, "bridge.log")
 
 	// Check if already running
 	if isRunning(pidPath) {
@@ -94,14 +94,7 @@ func cmdStart() {
 	fmt.Println()
 	printConnectionQRCode(cfg.WebhookURL, cfg.UID)
 
-	// Open log file
-	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatalf("Failed to open log file %s: %v", logPath, err)
-	}
-	defer logFile.Close()
-
-	// Use /dev/null for stdin
+	// Open /dev/null for both stdout and stderr (no logging in release mode)
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
 		log.Fatalf("Failed to open %s: %v", os.DevNull, err)
@@ -115,7 +108,7 @@ func cmdStart() {
 	}
 
 	p, err := os.StartProcess(exe, []string{exe, "run"}, &os.ProcAttr{
-		Files: []*os.File{devNull, logFile, logFile},
+		Files: []*os.File{devNull, devNull, devNull}, // stdin, stdout, stderr all go to /dev/null
 		Sys:   daemonSysProcAttr(),
 	})
 	if err != nil {
@@ -131,7 +124,103 @@ func cmdStart() {
 	}
 
 	p.Release()
-	fmt.Printf("Started (PID %d), log: %s\n", pid, logPath)
+	fmt.Printf("Started (PID %d), logging disabled in release mode\n", pid)
+}
+
+// cmdRunRelease runs the bridge without any logging (release build)
+func cmdRunRelease() {
+	// Disable all logging in release mode
+	log.SetOutput(os.Stderr)
+	log.SetFlags(0)
+
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("[Main] Failed to load config: %v", err)
+	}
+
+	// ==========================================
+	// DISPLAY BRIDGE UID (prominently)
+	// ==========================================
+	fmt.Println()
+	fmt.Println("╔══════════════════════════════════════════════════════════╗")
+	fmt.Printf("║  %-50s                                         ║\n", config.GetDisplayUID(cfg))
+	fmt.Println("╚══════════════════════════════════════════════════════════╝")
+	fmt.Println()
+	printConnectionQRCode(cfg.WebhookURL, cfg.UID)
+
+	// Create OpenClaw client
+	clawdbotClient := openclaw.NewClient(
+		cfg.OpenClaw.GatewayPort,
+		cfg.OpenClaw.GatewayToken,
+		cfg.OpenClaw.AgentID,
+	)
+
+	// Create session store
+	sessionStore := sessions.NewStore(sessions.DefaultStoreConfig(cfg.SessionStorePath))
+
+	// Create bridge
+	bridgeInstance := bridge.NewBridge(nil, clawdbotClient)
+	bridgeInstance.SetUID(cfg.UID)                // Set UID for message routing
+	bridgeInstance.SetSessionStore(sessionStore)  // Configure session store
+
+	// Set session scope from config
+	var scope sessions.SessionScope
+	switch cfg.SessionScope {
+	case "global":
+		scope = sessions.SessionScopeGlobal
+	case "per-sender":
+		fallthrough
+	default:
+		scope = sessions.SessionScopePerSender
+	}
+	bridgeInstance.SetSessionScope(scope)
+
+	// Set OpenClaw event callback to forward to webhook
+	clawdbotClient.SetEventCallback(bridgeInstance.HandleOpenClawEvent)
+
+	// Create webhook client with bridge message handler
+	webhookClient := webhook.NewClient(
+		cfg.WebhookURL,
+		bridgeInstance.HandleWebhookMessage,
+		cfg.UID, // Pass UID for message identification
+	)
+
+	// Set webhook client on bridge
+	bridgeInstance.SetWebhookClient(webhookClient)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start OpenClaw persistent connection
+	if err := clawdbotClient.Connect(ctx); err != nil {
+		log.Fatalf("[Main] Failed to connect to OpenClaw Gateway: %v", err)
+	}
+	defer clawdbotClient.Close()
+
+	// Start Webhook persistent connection
+	if err := webhookClient.Connect(ctx); err != nil {
+		log.Fatalf("[Main] Failed to connect to Webhook server: %v", err)
+	}
+	defer webhookClient.Close()
+
+	// Make sure to close connections on shutdown
+	go func() {
+		<-ctx.Done()
+		webhookClient.Close()
+		clawdbotClient.Close()
+	}()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	fmt.Println("OpenClaw Bridge started successfully (release mode - no logging)")
+	fmt.Println("Press Ctrl+C to stop")
+
+	select {
+	case <-sigChan:
+		fmt.Println("\nShutting down...")
+		cancel()
+	}
 }
 
 func cmdStop() {
@@ -180,108 +269,7 @@ func cmdStatus() {
 	}
 }
 
-func cmdRun() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Println("[Main] Starting OpenClaw Bridge...")
-
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("[Main] Failed to load config: %v", err)
-	}
-
-	// ==========================================
-	// DISPLAY BRIDGE UID (prominently)
-	// ==========================================
-	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════════════════════════╗")
-	fmt.Printf("║  %-50s                                         ║\n", config.GetDisplayUID(cfg))
-	fmt.Println("╚══════════════════════════════════════════════════════════╝")
-	fmt.Println()
-	printConnectionQRCode(cfg.WebhookURL, cfg.UID)
-	log.Printf("[Main] Loaded config: WebhookURL=%s, Gateway=127.0.0.1:%d, AgentID=%s",
-		cfg.WebhookURL, cfg.OpenClaw.GatewayPort, cfg.OpenClaw.AgentID)
-
-	// Create OpenClaw client
-	clawdbotClient := openclaw.NewClient(
-		cfg.OpenClaw.GatewayPort,
-		cfg.OpenClaw.GatewayToken,
-		cfg.OpenClaw.AgentID,
-	)
-
-	// Create session store
-	sessionStore := sessions.NewStore(sessions.DefaultStoreConfig(cfg.SessionStorePath))
-	log.Printf("[Main] Session store configured: %s", cfg.SessionStorePath)
-
-	// Create bridge
-	bridgeInstance := bridge.NewBridge(nil, clawdbotClient)
-	bridgeInstance.SetUID(cfg.UID)        // Set UID for message routing
-	bridgeInstance.SetSessionStore(sessionStore) // Configure session store
-
-	// Set session scope from config
-	var scope sessions.SessionScope
-	switch cfg.SessionScope {
-	case "global":
-		scope = sessions.SessionScopeGlobal
-	case "per-sender":
-		fallthrough
-	default:
-		scope = sessions.SessionScopePerSender
-	}
-	bridgeInstance.SetSessionScope(scope)
-
-	// Set OpenClaw event callback to forward to webhook
-	clawdbotClient.SetEventCallback(bridgeInstance.HandleOpenClawEvent)
-
-	// Create webhook client with bridge message handler
-	webhookClient := webhook.NewClient(
-		cfg.WebhookURL,
-		bridgeInstance.HandleWebhookMessage,
-		cfg.UID, // Pass UID for message identification
-	)
-
-	// Set webhook client on bridge
-	bridgeInstance.SetWebhookClient(webhookClient)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Start OpenClaw persistent connection
-	log.Println("[Main] Connecting to OpenClaw Gateway...")
-	if err := clawdbotClient.Connect(ctx); err != nil {
-		log.Fatalf("[Main] Failed to connect to OpenClaw Gateway: %v", err)
-	}
-	defer clawdbotClient.Close()
-
-	// Start Webhook persistent connection
-	log.Println("[Main] Connecting to Webhook server...")
-	if err := webhookClient.Connect(ctx); err != nil {
-		log.Fatalf("[Main] Failed to connect to Webhook server: %v", err)
-	}
-	defer webhookClient.Close()
-
-	// Make sure to close connections on shutdown
-	go func() {
-		<-ctx.Done()
-		log.Println("[Main] Shutting down connections...")
-		webhookClient.Close()
-		clawdbotClient.Close()
-	}()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	log.Println("[Main] OpenClaw Bridge started successfully")
-	log.Println("[Main] Press Ctrl+C to stop")
-
-	select {
-	case <-sigChan:
-		log.Println("[Main] Received shutdown signal, stopping...")
-		cancel()
-	}
-
-	log.Println("[Main] OpenClaw Bridge stopped")
-}
-
+// Helper functions
 func isRunning(pidPath string) bool {
 	pid, err := readPID(pidPath)
 	if err != nil {
@@ -298,7 +286,6 @@ func readPID(pidPath string) (int, error) {
 	return strconv.Atoi(strings.TrimSpace(string(data)))
 }
 
-// applyConfigArgs parses key=value args and saves to bridge.json
 func applyConfigArgs(args []string) {
 	kv := parseKeyValue(args)
 	webhookURL := kv["webhook_url"]

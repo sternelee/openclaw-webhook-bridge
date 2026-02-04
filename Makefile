@@ -1,4 +1,4 @@
-.PHONY: build build-all clean test run fmt vet help
+.PHONY: build build-all build-release clean test run fmt vet help
 
 BINARY_NAME=openclaw-bridge
 VERSION?=0.1.0
@@ -17,6 +17,15 @@ build: ## 编译当前平台的二进制文件
 build-all: ## 编译所有平台的二进制文件
 	@echo "编译所有平台..."
 	./scripts/build.sh
+
+build-release: ## 编译 release 版本（无日志）
+	@echo "编译 $(BINARY_NAME) (release mode, no logging)..."
+	go build -tags release -o $(BINARY_NAME) ./$(SRC_DIR)/
+	@echo "完成: $(BINARY_NAME) (release)"
+
+build-all-release: ## 编译所有平台的 release 版本
+	@echo "编译所有平台 (release mode)..."
+	RELEASE=1 ./scripts/build.sh
 
 clean: ## 清理构建文件
 	@echo "清理..."

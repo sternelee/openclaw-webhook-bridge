@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Build script for ClawdBot Bridge
+# Build script for OpenClaw Bridge
 # Compiles binaries for multiple platforms
 
 set -e
@@ -9,9 +9,19 @@ VERSION=${VERSION:-"0.1.0"}
 BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-BINARY_NAME="clawdbot-bridge"
+BINARY_NAME="openclaw-bridge"
 DIST_DIR="dist"
 SRC_DIR="cmd/bridge"
+
+# Check if building release version (no logging)
+if [ -n "$RELEASE" ]; then
+    BUILD_TAGS="-tags release"
+    BINARY_NAME="${BINARY_NAME}"
+    echo "Building RELEASE version (logging disabled)"
+else
+    BUILD_TAGS=""
+    echo "Building DEBUG version (with logging)"
+fi
 
 # Build flags
 LDFLAGS="-w -s -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}"
@@ -49,6 +59,7 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     echo "Building for ${GOOS}/${GOARCH}..."
 
     GOOS=${GOOS} GOARCH=${GOARCH} go build \
+        ${BUILD_TAGS} \
         -ldflags="${LDFLAGS}" \
         -o "${OUTPUT_PATH}" \
         "./${SRC_DIR}/"
