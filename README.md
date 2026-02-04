@@ -45,7 +45,7 @@ Invoke-WebRequest -Uri https://github.com/sternelee/openclaw-webhook-bridge/rele
 
 ```bash
 git clone https://github.com/sternelee/openclaw-webhook-bridge.git
-cd moltbotCNAPP
+cd openclaw-webhook-bridge
 go build -o openclaw-bridge ./cmd/bridge/
 ```
 
@@ -185,7 +185,57 @@ tail -f ~/.openclaw/bridge.log
 }
 ```
 
+## 项目架构
+
+OpenClaw Bridge 由三个主要组件构成：
+
+```
+┌─────────────────┐     WebSocket      ┌──────────────────┐
+│ WeChat Mini-    │◄──────────────────►│ Cloudflare       │
+│ Program (Taro)  │    (ws://...?uid)  │ Workers Webhook  │
+└─────────────────┘                     └────────┬─────────┘
+                                                │
+                                                │ Durable Object
+                                                │ (single global,
+                                                │  routes by UID)
+                                                ▼
+                                       ┌──────────────────┐
+                                       │ Go Bridge         │
+                                       │ (connects to     │
+                                       │  OpenClaw)       │
+                                       └────────┬─────────┘
+                                                │
+                                                ▼
+                                       ┌──────────────────┐
+                                       │ OpenClaw         │
+                                       │ AI Gateway       │
+                                       │ (localhost:18789)│
+                                       └──────────────────┘
+```
+
+### 组件说明
+
+| 组件 | 目录 | 说明 |
+|------|------|------|
+| **Go Bridge** | `cmd/bridge/`, `internal/` | 生产级守护进程，连接 Webhook 和 OpenClaw Gateway |
+| **Cloudflare Workers** | `cloudflare-webhook/` | 基于 Durable Objects 的 WebSocket 服务，支持多实例路由 |
+| **Node.js Webhook** | `node-webhook/` | 本地测试用 WebSocket 服务器 |
+| **WeChat Mini-Program** | `openclaw-mapp/` | Taro + React 的微信小程序前端 |
+
+### UID 路由机制
+
+所有 WebSocket 连接使用 UID（唯一标识符）进行路由：
+
+1. Bridge 启动时自动生成 UUID v4 并保存到 `~/.openclaw/bridge.json`
+2. 小程序在设置页面输入 Bridge UID
+3. 连接时附加 `?uid=xxx` 查询参数
+4. Durable Object 使用 `Map<UID, Set<WebSocket>>` 进行内部路由
+
+这种设计允许多个 Bridge 实例连接到同一个 Webhook 服务器而不会冲突。
+
 ## 开发
+
+### Go Bridge
 
 ```bash
 # 前台运行（日志直接输出到终端）
@@ -193,7 +243,48 @@ tail -f ~/.openclaw/bridge.log
 
 # 编译所有平台
 ./scripts/build.sh
+
+# 代码检查
+make fmt      # 格式化代码
+make vet      # 静态分析
+make lint     # fmt + vet
+make test     # 运行测试
 ```
+
+### Cloudflare Workers Webhook
+
+项目包含基于 Cloudflare Workers 和 Durable Objects 的 WebSocket 服务，用于生产环境部署：
+
+```bash
+cd cloudflare-webhook
+
+# 本地开发
+pnpm dev
+
+# 部署到 Cloudflare
+pnpm deploy
+
+# 实时日志
+pnpm tail
+```
+
+**架构说明**：
+- 使用 Hono 框架处理 HTTP/WebSocket 路由
+- 单个全局 Durable Object 管理 WebSocket 连接
+- 基于 UID 的内部路由机制（`Map<UID, Set<WebSocket>>`）
+- 支持连接休眠（hibernation）以节省内存
+
+### Node.js 本地测试服务器
+
+用于本地测试，无需 Cloudflare：
+
+```bash
+cd node-webhook
+npm install
+npm start
+```
+
+测试页面：http://localhost:8080
 
 ## openclaw-mapp（小程序前端）
 
@@ -288,8 +379,8 @@ OpenClaw 的并发能力基于 **Session**：
 
 ```bash
 cd openclaw-mapp
-npm install
-npm run dev:weapp
+pnpm install
+pnpm dev:weapp
 ```
 
 ### Tailwind CSS
@@ -299,6 +390,8 @@ npm run dev:weapp
 - `tailwind.config.js` 配置 `content`
 - `config/index.ts` 里集成 `weapp-tailwindcss/webpack`
 - `package.json` 增加 `postinstall` 执行 `weapp-tw patch`
+
+**注意**：请使用 `pnpm` 作为包管理器，因为项目中配置了 pnpm 相关的钩子和依赖。
 
 如需重置或升级 Tailwind 配置，请参考：
 - https://docs.taro.zone/en/docs/tailwindcss

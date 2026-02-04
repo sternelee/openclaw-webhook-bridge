@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 OpenClaw is an AI assistant system with three main components:
 
 1. **Go Bridge** (`cmd/bridge/main.go`) - Production daemon connecting webhook to OpenClaw Gateway
-2. **Cloudflare Workers Webhook** (`workers/openclaw-webhook/`) - Durable Object-based WebSocket service
+2. **Cloudflare Workers Webhook** (`cloudflare-webhook/`) - Durable Object-based WebSocket service with Hono
 3. **WeChat Mini-Program** (`openclaw-mapp/`) - Taro-based React client for chatting with OpenClaw
 
 ### System Architecture
@@ -19,7 +19,8 @@ OpenClaw is an AI assistant system with three main components:
 └─────────────────┘                     └────────┬─────────┘
                                                 │
                                                 │ Durable Object
-                                                │ (per UID)
+                                                │ (single global,
+                                                │  routes by UID)
                                                 ▼
                                        ┌──────────────────┐
                                        │ Go Bridge         │
@@ -110,18 +111,19 @@ The webhook service is built with Cloudflare Workers and Durable Objects, provid
 
 ### Webhook Architecture
 
-- **Entry Point** (`workers/openclaw-webhook/src/index.ts`) - Hono-based HTTP/WebSocket router
-- **Durable Object** (`workers/openclaw-webhook/src/durable-object.ts`) - Per-UID WebSocket state management with hibernation API
+- **Entry Point** (`cloudflare-webhook/src/index.ts`) - Hono-based HTTP/WebSocket router with test page
+- **Durable Object** (`cloudflare-webhook/src/websocket-hub.ts`) - Single global DO with UID-based routing using hibernation API
 - **WebSocket Protocol**:
   - Accepts both `/ws?uid=xxx` and `/ws/:uid` path patterns
   - Rejects connections without UID (returns 400 error)
-  - Routes messages to bridge instances based on UID
+  - Routes messages to bridge instances based on UID within a single global Durable Object
   - Uses `state.acceptWebSocket()` and `state.getWebSockets()` for hibernation
+  - Broadcasts messages from clients to other clients with the same UID (multi-client sync)
 
 ### Webhook Build Commands
 
 ```bash
-cd workers/openclaw-webhook
+cd cloudflare-webhook
 
 # Install dependencies
 pnpm install
@@ -223,15 +225,17 @@ class SettingsPage extends Component {
 
 ## Running the Complete System
 
-### TypeScript Bridge (Development Alternative)
+### Node.js Webhook Server (Local Testing)
+
+For local testing without Cloudflare, use the Node.js webhook server:
 
 ```bash
-cd ts-bridge
-bun install
-bun run src/cli.ts run webhook_url=ws://localhost:8080/ws
+cd node-webhook
+npm install
+npm start
 ```
 
-The TS bridge runs in the foreground only (no daemon mode). Use Ctrl+C to stop.
+Then connect the Go bridge to `ws://localhost:8080/ws`. A test page is available at `http://localhost:8080`.
 
 ### Full System Startup Sequence
 
@@ -239,7 +243,7 @@ The TS bridge runs in the foreground only (no daemon mode). Use Ctrl+C to stop.
 
 2. **Deploy Cloudflare Workers Webhook**:
    ```bash
-   cd workers/openclaw-webhook
+   cd cloudflare-webhook
    pnpm deploy
    ```
 
@@ -269,10 +273,10 @@ All WebSocket connections in this system use UID (Unique Identifier) based routi
 1. **Bridge UID**: Auto-generated UUID v4 stored in `~/.openclaw/bridge.json`
 2. **Mini-Program Config**: User enters the Bridge UID in settings page
 3. **WebSocket Connection**: Mini-program appends `?uid=xxx` when connecting
-4. **Durable Object**: Cloudflare Worker creates one DO instance per UID
-5. **Message Routing**: Each DO maintains WebSocket connections for a specific bridge instance
+4. **Durable Object**: Cloudflare Worker uses a single global Durable Object that routes messages by UID internally
+5. **Message Routing**: The DO maintains a `Map<UID, Set<WebSocket>>` for routing messages to specific bridge instances
 
-This allows multiple bridges to connect to the same webhook server without conflicts.
+This design allows multiple bridges and multiple clients to connect to the same webhook server without conflicts, with efficient hibernation support.
 
 ## Key Design Decisions
 
@@ -298,7 +302,7 @@ This allows multiple bridges to connect to the same webhook server without confl
 ## File Structure Reference
 
 ```
-moltbotCNAPP/
+openclaw-webhook-bridge/
 ├── cmd/bridge/              # Go bridge entry point
 │   ├── main.go              # CLI and daemon management
 │   ├── daemon_unix.go       # Unix daemon implementation
@@ -309,13 +313,16 @@ moltbotCNAPP/
 │   ├── openclaw/            # OpenClaw Gateway client
 │   ├── sessions/            # Session persistence
 │   └── webhook/             # Webhook server client
-├── ts-bridge/               # TypeScript bridge (Bun)
-├── workers/
-│   └── openclaw-webhook/    # Cloudflare Workers webhook
-│       ├── src/
-│       │   ├── index.ts     # Entry point, router
-│       │   └── durable-object.ts
-│       └── wrangler.toml    # Worker configuration
+├── cloudflare-webhook/      # Cloudflare Workers webhook (Hono + Durable Objects)
+│   ├── src/
+│   │   ├── index.ts         # Hono router with test page
+│   │   └── websocket-hub.ts # Durable Object with UID routing
+│   ├── wrangler.toml        # Worker configuration
+│   └── package.json
+├── node-webhook/            # Local Node.js WebSocket server for testing
+│   ├── server.js            # WebSocket server
+│   ├── test-page.html       # Test page UI
+│   └── package.json
 ├── openclaw-mapp/           # WeChat mini-program
 │   ├── src/
 │   │   ├── app.tsx          # App entry point
