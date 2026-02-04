@@ -111,16 +111,45 @@ tail -f ~/.openclaw/bridge.log
 {
   "id": "unique-message-id",
   "content": "用户消息内容",
-  "session": "optional-session-id"
+  "session": "optional-session-id",
+  "peerKind": "dm | group | channel",
+  "peerId": "peer-id",
+  "topicId": "optional-topic-id",
+  "threadId": "optional-thread-id"
 }
 ```
 
 字段说明：
 - `id`: 必填，消息唯一标识，用于去重
 - `content`: 必填，消息内容
-- `session`: 可选，会话 ID，如果不提供则使用消息 ID 生成 `webhook:{id}`
+- `session`: 可选，会话 ID（显式优先）
+- `peerKind`/`peerId`/`topicId`/`threadId`: 可选，会话路由字段；当 `session` 为空时用于构造 Telegram 风格 Session
+  - 群/频道话题：`peerKind=group|channel` + `peerId` + `topicId` → `:topic:`
+  - 私聊线程：`peerKind=dm` + `peerId` + `threadId` → `:thread:`
 
 桥接服务会忽略控制消息（`type` 为 `connected`、`error`、`event` 的 payload），避免将非用户消息转发给 OpenClaw。
+
+### 控制消息：会话列表
+
+客户端可发送 `session.list` 获取当前会话列表：
+
+```json
+{ "type": "session.list" }
+```
+
+响应格式：
+
+```json
+{
+  "type": "session.list",
+  "data": {
+    "sessions": [
+      { "key": "agent:main:webhook:group:xxx:topic:42", "updatedAt": 1700000000000 }
+    ],
+    "count": 1
+  }
+}
+```
 
 ### 服务端响应格式
 
@@ -165,6 +194,114 @@ tail -f ~/.openclaw/bridge.log
 # 编译所有平台
 ./scripts/build.sh
 ```
+
+## openclaw-mapp（小程序前端）
+
+`openclaw-mapp` 是配套的小程序前端，支持：
+- 左侧会话栏（Session 列表）+ 手动刷新
+- 会话切换后仅显示该 Session 消息
+- 通过 `session.list` 从桥接服务拉取会话列表
+
+### 小程序使用说明：会话/Topic 并发与 Telegram 最佳实践
+
+OpenClaw 的并发能力基于 **Session**：
+- 一条 Session = 一条独立任务流（独立上下文）
+- 多条 Session = 同时处理多条任务
+
+在 Telegram 里，最简单的“多 Session”入口就是 **Topics**：
+- 一个群开启多个 Topic
+- 每个 Topic 对应一条独立 Session
+- 一个群 = 多条并行车道
+
+#### 推荐的「任务分车道」设计
+
+给小白的默认建议：
+- **Chat**：日常聊天（上下文自由发散）
+- **Work**：办正事（只讨论任务/指令）
+- **Feed**：资讯/巡逻（低打扰）
+
+效果：
+- Chat 的闲聊不影响 Work
+- Feed 的噪音不污染 Chat
+
+#### 让机器人在群里“能看到消息”
+
+很多问题并不是 `requireMention=false`，而是 bot 根本收不到群消息。建议同时做：
+1. 在 @BotFather 里关闭 Privacy：`/setprivacy → Disable`
+2. 把 bot 拉进群后设为管理员：群设置 → 管理员 → 添加 bot
+
+#### 开启 Topics / Forum
+
+在群设置里打开 Topics / Forum，然后创建上面的 Topic（Chat / Work / Feed）。
+
+#### 触发规则（requireMention）
+
+目的：
+- 确保每个 Topic 都能独立触发 OpenClaw
+- 控制它插话的频率
+
+两种常见策略：
+
+**策略 A：全群都不需要 @**  
+适合机器人专用群 / 小群  
+设置：`requireMention = false`
+
+**策略 B：只有部分 Topic 不需要 @**  
+群默认需要 @（避免乱插话）  
+例如 Work / Feed 不需要 @（更像“专用任务车道”）
+
+配置示例：
+```json
+{
+  "channels": {
+    "telegram": {
+      "groups": {
+        "-1001234567890": {
+          "requireMention": true,
+          "topics": {
+            "WorkTopicId": { "requireMention": false },
+            "FeedTopicId": { "requireMention": false }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+#### 30 秒验收：你真的“并发多任务”了吗？
+
+1. 在 Chat Topic 说一句  
+2. 立刻切到 Work Topic 再说一句  
+3. 观察 OpenClaw 是否：
+   - 两边都能收到并回复  
+   - 回复不串到别的 Topic  
+   - 两个 Topic 的上下文互不影响
+
+#### 常见坑
+
+1. **群里完全没反应**：先查 BotFather /setprivacy 是否 Disable，再查 bot 是否是管理员  
+2. **私聊正常，群里不正常**：99% 是 privacy/admin/requireMention 组合问题  
+3. **回复串台**：Topic ID 配错（或把一个 Topic 当成另一个 Topic）
+
+### 本地开发
+
+```bash
+cd openclaw-mapp
+npm install
+npm run dev:weapp
+```
+
+### Tailwind CSS
+
+前端样式已改为 TailwindCSS。构建链路包含：
+- `postcss.config.js` 启用 `tailwindcss`
+- `tailwind.config.js` 配置 `content`
+- `config/index.ts` 里集成 `weapp-tailwindcss/webpack`
+- `package.json` 增加 `postinstall` 执行 `weapp-tw patch`
+
+如需重置或升级 Tailwind 配置，请参考：
+- https://docs.taro.zone/en/docs/tailwindcss
 
 ## 示例：简单 WebSocket 服务端
 

@@ -243,6 +243,52 @@ OpenClaw Webhook Bridge 支持通过 WebSocket 消息来控制 session 的生命
 
 ---
 
+## 7. Webhook 话题/会话路由（Telegram 风格）
+
+如果不传 `session`，也可以通过「会话路由字段」让 webhook 自动生成与 Telegram 类似的 session key。
+
+支持字段（任选其一组合即可）：
+
+- `peerKind`: `dm` | `group` | `channel`
+- `peerId`: 目标 ID（用户/群/频道）
+- `topicId`: 话题/主题 ID（仅 `group/channel` 生效，生成 `:topic:` 后缀）
+- `threadId`: 线程 ID（`dm` 时生成 `:thread:` 后缀；`group/channel` 时会在缺少 `topicId` 时视作 topic）
+- `chatType`/`chatId`: `peerKind`/`peerId` 的别名
+- `senderId`: 当 `peerKind` 为空时作为 `dm` 的 `peerId`
+
+### 示例：群组话题（topic）
+
+```json
+{
+  "id": "msg-1001",
+  "content": "群里聊新话题",
+  "peerKind": "group",
+  "peerId": "-1001234567890",
+  "topicId": "42"
+}
+```
+
+→ session key: `agent:main:webhook:group:-1001234567890:topic:42`
+
+### 示例：DM 线程（thread）
+
+```json
+{
+  "id": "msg-1002",
+  "content": "继续这个私聊线程",
+  "peerKind": "dm",
+  "peerId": "user-abc",
+  "threadId": "99"
+}
+```
+
+→ session key: `agent:main:webhook:dm:user-abc:thread:99`
+
+### 说明
+
+- `session` 字段依然优先（显式 session 会覆盖上述自动生成逻辑）。
+- 未提供路由字段时，仍按原有 session scope 规则生成（`webhook:{id}` / `global`）。
+
 ## Session 持久化
 
 Sessions 会自动持久化到 `~/.openclaw/sessions.json`：

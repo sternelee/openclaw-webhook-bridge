@@ -48,6 +48,11 @@ func (c *Client) SetEventCallback(cb EventCallback) {
 	c.onEvent = cb
 }
 
+// AgentID returns the configured agent ID for this client.
+func (c *Client) AgentID() string {
+	return c.agentID
+}
+
 // Connect establishes a persistent WebSocket connection to the gateway
 func (c *Client) Connect(ctx context.Context) error {
 	c.ctx, c.cancel = context.WithCancel(ctx)

@@ -5,12 +5,17 @@ export interface ChatMessage {
   timestamp: number;
   status?: "sending" | "sent" | "error" | "streaming";
   read?: boolean; // Read receipt status
+  session?: string;
 }
 
 export interface SendMessageRequest {
   id: string;
   content: string;
   session?: string;
+  peerKind?: "dm" | "group" | "channel";
+  peerId?: string;
+  topicId?: string;
+  threadId?: string;
 }
 
 export interface ProgressMessage {

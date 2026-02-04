@@ -46,6 +46,53 @@ func ResolveSessionKey(scope SessionScope, msg *WebhookMessage) string {
 	}
 }
 
+// WebhookSessionParams defines optional routing metadata for webhook sessions.
+type WebhookSessionParams struct {
+	AgentID  string
+	PeerKind string
+	PeerID   string
+	TopicID  string
+	ThreadID string
+}
+
+// BuildWebhookSessionKey builds a session key that mirrors OpenClaw channel routing.
+// Returns ("", false) if insufficient data is provided.
+func BuildWebhookSessionKey(params WebhookSessionParams) (string, bool) {
+	peerKind := strings.ToLower(strings.TrimSpace(params.PeerKind))
+	peerID := strings.TrimSpace(params.PeerID)
+	if peerKind == "" || peerID == "" {
+		return "", false
+	}
+
+	switch peerKind {
+	case "dm", "group", "channel":
+	default:
+		return "", false
+	}
+
+	topicID := strings.TrimSpace(params.TopicID)
+	threadID := strings.TrimSpace(params.ThreadID)
+
+	// For groups/channels, treat threadId as topicId if topicId is missing.
+	if (peerKind == "group" || peerKind == "channel") && topicID == "" && threadID != "" {
+		topicID = threadID
+	}
+	if topicID != "" && (peerKind == "group" || peerKind == "channel") {
+		peerID = fmt.Sprintf("%s:topic:%s", peerID, topicID)
+	}
+
+	agentID := strings.TrimSpace(params.AgentID)
+	if agentID == "" {
+		agentID = DefaultAgentID
+	}
+
+	base := fmt.Sprintf("agent:%s:webhook:%s:%s", agentID, peerKind, peerID)
+	if peerKind == "dm" && threadID != "" {
+		return NormalizeSessionKey(fmt.Sprintf("%s:thread:%s", base, threadID)), true
+	}
+	return NormalizeSessionKey(base), true
+}
+
 // BuildAgentMainSessionKey builds the canonical main session key
 func BuildAgentMainSessionKey(agentID, mainKey string) string {
 	if mainKey == "" {

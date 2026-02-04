@@ -1,5 +1,7 @@
 import path from "path";
 
+const { UnifiedWebpackPluginV5 } = require("weapp-tailwindcss/webpack");
+
 const config = {
   projectName: "openclaw-mapp",
   date: "2025-2-3",
@@ -50,6 +52,19 @@ const config = {
     },
     webpackChain(chain) {
       chain.resolve.alias.set("@", path.resolve(__dirname, "..", "src"));
+      chain.merge({
+        plugin: {
+          install: {
+            plugin: UnifiedWebpackPluginV5,
+            args: [
+              {
+                appType: "taro",
+                rem2rpx: true,
+              },
+            ],
+          },
+        },
+      });
     },
   },
   h5: {

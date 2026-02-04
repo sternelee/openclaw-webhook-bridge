@@ -1,6 +1,5 @@
 import { Component } from "react";
 import { View, Text } from "@tarojs/components";
-import "./index.scss";
 
 interface TypingIndicatorProps {
   text?: string;
@@ -12,19 +11,19 @@ class TypingIndicator extends Component<TypingIndicatorProps> {
     const { text = "正在输入...", showAvatar } = this.props;
 
     return (
-      <View className="typing-indicator-wrapper">
+      <View className="flex flex-row items-end py-2 mb-2">
         {showAvatar && (
-          <View className="typing-avatar">
-            <View className="avatar-placeholder" />
+          <View className="w-9 h-9 rounded-full mr-2 shrink-0">
+            <View className="w-full h-full bg-[#00A884] rounded-full" />
           </View>
         )}
-        <View className="typing-bubble">
-          <View className="typing-dots">
-            <View className="dot dot-1" />
-            <View className="dot dot-2" />
-            <View className="dot dot-3" />
+        <View className="flex flex-row items-center gap-[6px] px-4 py-2 bg-white rounded-xl rounded-bl-[2px] shadow">
+          <View className="flex items-center gap-1">
+            <View className="tw-dot tw-bounce-1" />
+            <View className="tw-dot tw-bounce-2" />
+            <View className="tw-dot tw-bounce-3" />
           </View>
-          <Text className="typing-text">{text}</Text>
+          <Text className="text-[13px] text-[#667781]">{text}</Text>
         </View>
       </View>
     );

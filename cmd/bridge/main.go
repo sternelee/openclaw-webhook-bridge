@@ -19,6 +19,8 @@ import (
 	"github.com/sternelee/openclaw-webhook-bridge/internal/config"
 	"github.com/sternelee/openclaw-webhook-bridge/internal/sessions"
 	"github.com/sternelee/openclaw-webhook-bridge/internal/webhook"
+	"github.com/google/uuid"
+	"github.com/skip2/go-qrcode"
 )
 
 func main() {
@@ -88,6 +90,7 @@ func cmdStart() {
 	fmt.Printf("║  %-50s                                         ║\n", config.GetDisplayUID(cfg))
 	fmt.Println("╚══════════════════════════════════════════════════════════╝")
 	fmt.Println()
+	printConnectionQRCode(cfg.WebhookURL, cfg.UID)
 
 	// Open log file
 	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -192,6 +195,7 @@ func cmdRun() {
 	fmt.Printf("║  %-50s                                         ║\n", config.GetDisplayUID(cfg))
 	fmt.Println("╚══════════════════════════════════════════════════════════╝")
 	fmt.Println()
+	printConnectionQRCode(cfg.WebhookURL, cfg.UID)
 	log.Printf("[Main] Loaded config: WebhookURL=%s, Gateway=127.0.0.1:%d, AgentID=%s",
 		cfg.WebhookURL, cfg.OpenClaw.GatewayPort, cfg.OpenClaw.AgentID)
 
@@ -310,7 +314,11 @@ func applyConfigArgs(args []string) {
 	if data, err := os.ReadFile(filepath.Join(dir, "bridge.json")); err == nil {
 		json.Unmarshal(data, &cfg)
 		defaultWebhookURL = cfg.WebhookURL
-		defaultUID = cfg.AgentID // Using agent_id field as uid for compatibility
+		if cfg.UID != "" {
+			defaultUID = cfg.UID
+		} else {
+			defaultUID = cfg.AgentID // Using agent_id field as uid for compatibility
+		}
 	}
 
 	// If no webhook_url provided, prompt for it with default value
@@ -344,10 +352,13 @@ func applyConfigArgs(args []string) {
 		if uid == "" {
 			uid = defaultUID
 		}
+		if uid == "" {
+			uid = generateUID()
+		}
 	}
 
 	cfg.WebhookURL = webhookURL
-	cfg.AgentID = uid
+	cfg.UID = uid
 
 	data, _ := json.MarshalIndent(cfg, "", "  ")
 	path := filepath.Join(dir, "bridge.json")
@@ -360,6 +371,75 @@ func applyConfigArgs(args []string) {
 type bridgeConfigJSON struct {
 	WebhookURL string `json:"webhook_url"`
 	AgentID    string `json:"agent_id,omitempty"`
+	UID        string `json:"uid,omitempty"`
+}
+
+func generateUID() string {
+	return uuid.NewString()
+}
+
+func printConnectionQRCode(webhookURL, uid string) {
+	if webhookURL == "" || uid == "" {
+		return
+	}
+
+	payloadBytes, err := json.Marshal(map[string]string{
+		"wsUrl": webhookURL,
+		"uid":   uid,
+	})
+	if err != nil {
+		log.Printf("[Main] Failed to build QR payload: %v", err)
+		return
+	}
+	payload := string(payloadBytes)
+
+	fmt.Println("Scan this QR with openclaw-mapp to connect:")
+	renderQRCode(payload)
+	fmt.Printf("QR payload: %s\n\n", payload)
+}
+
+func renderQRCode(payload string) {
+	qr, err := qrcode.New(payload, qrcode.Medium)
+	if err != nil {
+		log.Printf("[Main] Failed to generate QR: %v", err)
+		return
+	}
+	bitmap := qr.Bitmap()
+	if len(bitmap) == 0 || len(bitmap[0]) == 0 {
+		return
+	}
+
+	const border = 1
+	const upper = "▀"
+	const lower = "▄"
+	const full = "█"
+	const empty = " "
+
+	for y := -border; y < len(bitmap)+border; y += 2 {
+		var line strings.Builder
+		for x := -border; x < len(bitmap[0])+border; x++ {
+			top := false
+			bottom := false
+			if y >= 0 && y < len(bitmap) && x >= 0 && x < len(bitmap[0]) {
+				top = bitmap[y][x]
+			}
+			if y+1 >= 0 && y+1 < len(bitmap) && x >= 0 && x < len(bitmap[0]) {
+				bottom = bitmap[y+1][x]
+			}
+
+			switch {
+			case top && bottom:
+				line.WriteString(full)
+			case top && !bottom:
+				line.WriteString(upper)
+			case !top && bottom:
+				line.WriteString(lower)
+			default:
+				line.WriteString(empty)
+			}
+		}
+		fmt.Println(line.String())
+	}
 }
 
 func parseKeyValue(args []string) map[string]string {

@@ -3,6 +3,7 @@ package bridge
 import (
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/sternelee/openclaw-webhook-bridge/internal/openclaw"
@@ -14,6 +15,7 @@ import (
 type Bridge struct {
 	webhookClient  *webhook.Client
 	clawdbotClient *openclaw.Client
+	agentID        string
 	uid            string // Unique ID for this bridge instance
 	sessionStore   *sessions.Store
 	sessionScope   sessions.SessionScope
@@ -21,9 +23,14 @@ type Bridge struct {
 
 // NewBridge creates a new bridge
 func NewBridge(webhookClient *webhook.Client, clawdbotClient *openclaw.Client) *Bridge {
+	agentID := ""
+	if clawdbotClient != nil {
+		agentID = clawdbotClient.AgentID()
+	}
 	return &Bridge{
 		webhookClient:  webhookClient,
 		clawdbotClient: clawdbotClient,
+		agentID:        agentID,
 		sessionScope:   sessions.SessionScopePerSender, // Default
 	}
 }
@@ -74,9 +81,16 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 
 	// Parse the message to extract content and session
 	var msg struct {
-		ID      string `json:"id"`
-		Content string `json:"content"`
-		Session string `json:"session"`
+		ID       string `json:"id"`
+		Content  string `json:"content"`
+		Session  string `json:"session"`
+		PeerKind string `json:"peerKind"`
+		PeerID   string `json:"peerId"`
+		ChatType string `json:"chatType"`
+		ChatID   string `json:"chatId"`
+		SenderID string `json:"senderId"`
+		TopicID  string `json:"topicId"`
+		ThreadID string `json:"threadId"`
 	}
 	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Printf("[Bridge] Failed to parse webhook message: %v", err)
@@ -96,7 +110,41 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 		Content: msg.Content,
 		Session: msg.Session,
 	}
-	sessionKey := sessions.ResolveSessionKey(b.sessionScope, webhookMsg)
+	sessionKey := ""
+	peerKind := strings.TrimSpace(msg.PeerKind)
+	if peerKind == "" {
+		peerKind = strings.TrimSpace(msg.ChatType)
+	}
+	peerID := strings.TrimSpace(msg.PeerID)
+	if peerID == "" {
+		peerID = strings.TrimSpace(msg.ChatID)
+	}
+	if peerID == "" {
+		peerID = strings.TrimSpace(msg.SenderID)
+	}
+	if peerKind == "" && peerID != "" {
+		peerKind = "dm"
+	}
+
+	topicID := strings.TrimSpace(msg.TopicID)
+	threadID := strings.TrimSpace(msg.ThreadID)
+
+	if msg.Session != "" {
+		sessionKey = sessions.NormalizeSessionKey(msg.Session)
+	} else if peerKind != "" && peerID != "" {
+		if resolved, ok := sessions.BuildWebhookSessionKey(sessions.WebhookSessionParams{
+			AgentID:  b.agentID,
+			PeerKind: peerKind,
+			PeerID:   peerID,
+			TopicID:  topicID,
+			ThreadID: threadID,
+		}); ok {
+			sessionKey = resolved
+		}
+	}
+	if sessionKey == "" {
+		sessionKey = sessions.ResolveSessionKey(b.sessionScope, webhookMsg)
+	}
 
 	log.Printf("[Bridge] Resolved session key: %s (scope: %s)", sessionKey, b.sessionScope)
 
@@ -111,10 +159,25 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 
 	// Record session metadata if session store is configured
 	if b.sessionStore != nil {
+		deliveryTo := msg.ID
+		if peerID != "" {
+			deliveryTo = peerID
+		}
+		deliveryThreadID := ""
+		if peerKind == "dm" {
+			deliveryThreadID = threadID
+		} else if peerKind == "group" || peerKind == "channel" {
+			if topicID != "" {
+				deliveryThreadID = topicID
+			} else if threadID != "" {
+				deliveryThreadID = threadID
+			}
+		}
 		deliveryCtx := &sessions.DeliveryContext{
 			Channel:   "webhook",
-			To:        msg.ID, // Use message ID as the "to" address
+			To:        deliveryTo,
 			AccountId: b.uid,
+			ThreadId:  deliveryThreadID,
 		}
 
 		// If reset was triggered, we need to reset the session first

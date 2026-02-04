@@ -1,7 +1,6 @@
 import { Component } from "react";
 import { View, Text, Image } from "@tarojs/components";
 import { ChatMessage as ChatMessageType } from "../../types/openclaw";
-import "./index.scss";
 
 interface MessageBubbleProps {
   message: ChatMessageType;
@@ -33,52 +32,78 @@ class MessageBubble extends Component<MessageBubbleProps> {
 
     return (
       <View
-        className={`message-bubble-wrapper ${isUser ? "user" : "assistant"} ${isGrouped ? "grouped" : ""}`}
+        className={[
+          "flex max-w-[80%] mb-[2px]",
+          isGrouped ? "mb-[1px]" : "",
+          isUser ? "flex-row-reverse ml-auto" : "flex-row mr-auto",
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
         {showAvatar && !isUser && (
-          <View className="message-avatar">
+          <View className="w-9 h-9 rounded-full overflow-hidden mr-2 shrink-0 shadow">
             <Image
               src="https://via.placeholder.com/36/667eea/ffffff?text=AI"
-              className="avatar-image"
+              className="w-full h-full"
               lazyLoad
             />
           </View>
         )}
 
-        <View className={`message-bubble ${isStreaming ? "streaming" : ""} ${isError ? "error" : ""}`}>
+        <View
+          className={[
+            "relative px-3 py-2 rounded-xl min-w-[60px] max-w-full shadow",
+            isUser
+              ? `bg-[#DCF8C6] text-[#111B21] rounded-br-[2px] ${
+                  isGrouped ? "rounded-tr-[2px]" : ""
+                }`
+              : `bg-white text-[#111B21] rounded-bl-[2px] ${
+                  isGrouped ? "rounded-tl-[2px]" : ""
+                }`,
+            isError ? "bg-[#FFF0F0] border border-[#FFCCC7]" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           {/* Status indicator for sending messages */}
           {message.status === "sending" && (
-            <View className="message-status-indicator sending">
-              <View className="dot dot-1" />
-              <View className="dot dot-2" />
-              <View className="dot dot-3" />
+            <View className="flex items-center mb-1">
+              <View className="tw-dot tw-bounce-1 mx-[2px]" />
+              <View className="tw-dot tw-bounce-2 mx-[2px]" />
+              <View className="tw-dot tw-bounce-3 mx-[2px]" />
             </View>
           )}
 
           {/* Error indicator */}
           {isError && (
-            <View className="message-status-indicator error">
-              <Text className="error-icon">!</Text>
-            </View>
-          )}
-
-          {/* Read receipts for user messages */}
-          {isUser && message.status === "sent" && (
-            <View className="read-receipt">
-              <View className={`checkmark ${message.read ? "read" : ""}`} />
-              {message.read && <View className={`checkmark ${message.read ? "read" : ""}`} />}
+            <View className="flex items-center mb-1">
+              <Text className="flex items-center justify-center w-4 h-4 rounded-full bg-[#EA868F] text-white text-[10px] font-bold">
+                !
+              </Text>
             </View>
           )}
 
           {/* Message content */}
-          <Text className={`message-content ${isUser ? "user" : "assistant"}`}>
+          <Text className="text-[16px] leading-[1.4] whitespace-pre-wrap break-words text-[#111B21]">
             {message.content}
+            {isStreaming && <Text className="ml-[2px] tw-blink">▋</Text>}
           </Text>
 
           {/* Timestamp */}
-          <Text className={`message-timestamp ${isUser ? "user" : "assistant"}`}>
-            {formatTime(message.timestamp)}
-          </Text>
+          <View className="flex items-center justify-end gap-1 mt-1">
+            <Text className="text-[11px] text-[#667781]">
+              {formatTime(message.timestamp)}
+            </Text>
+            {isUser && message.status === "sent" && (
+              <Text
+                className={`text-[11px] ${
+                  message.read ? "text-[#34B7F1]" : "text-[#53BDEB]"
+                }`}
+              >
+                {message.read ? "✓✓" : "✓"}
+              </Text>
+            )}
+          </View>
         </View>
       </View>
     );
@@ -92,7 +117,7 @@ export class MessageGroup extends Component<MessageGroupProps> {
     const isUser = role === "user";
 
     return (
-      <View className={`message-group ${isUser ? "user" : "assistant"}`}>
+      <View className={`flex flex-col w-full ${isUser ? "items-end" : "items-start"}`}>
         {messages.map((message, index) => (
           <MessageBubble
             key={message.id}
