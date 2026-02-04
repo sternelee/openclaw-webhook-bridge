@@ -1,6 +1,6 @@
 .PHONY: build build-all clean test run fmt vet help
 
-BINARY_NAME=clawdbot-bridge
+BINARY_NAME=openclaw-bridge
 VERSION?=0.1.0
 BUILD_DIR=dist
 SRC_DIR=cmd/bridge
