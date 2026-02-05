@@ -22,7 +22,6 @@ interface ChatState {
 @inject("chatStore")
 @observer
 class Chat extends Component<ChatProps, ChatState> {
-  private scrollViewRef: any = null;
   private inputContent: string = "";
 
   constructor(props: ChatProps) {
@@ -170,18 +169,30 @@ class Chat extends Component<ChatProps, ChatState> {
   };
 
   scrollToBottom = () => {
+    // Use setTimeout to ensure DOM has updated
     setTimeout(() => {
-      const query = Taro.createSelectorQuery();
-      query.select(".messages-container").boundingClientRect();
-      query.exec((res) => {
-        if (res[0]) {
-          this.scrollViewRef?.scrollTo({
-            top: res[0].height,
-            duration: 300,
-          });
-        }
-      });
-    }, 100);
+      // Scroll to bottom using #bottom element
+      Taro.createSelectorQuery()
+        .select("#bottom")
+        .boundingClientRect()
+        .selectViewport()
+        .scrollOffset()
+        .exec((res) => {
+          const bottomRect = res[0] as any;
+          const scrollRes = res[1] as any;
+          if (bottomRect && scrollRes) {
+            const systemInfo = Taro.getSystemInfoSync();
+            const windowHeight = systemInfo.windowHeight;
+            const scrollTop = scrollRes.scrollTop || 0;
+            // Calculate target scroll position
+            const targetTop = scrollTop + bottomRect.top - windowHeight + 60;
+            Taro.pageScrollTo({
+              scrollTop: Math.max(0, targetTop),
+              duration: 100,
+            });
+          }
+        });
+    }, 150);
   };
 
   // Group consecutive messages from the same sender
@@ -352,9 +363,6 @@ class Chat extends Component<ChatProps, ChatState> {
               className="flex-1 relative z-[1] py-3 overflow-hidden"
               scrollY
               scrollIntoView="bottom"
-              ref={(ref: any) => {
-                this.scrollViewRef = ref;
-              }}
               enableBackToTop
             >
               <View className="flex flex-col min-h-full">
