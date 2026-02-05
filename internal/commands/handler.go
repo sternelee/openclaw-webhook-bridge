@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-
-	"github.com/sternelee/openclaw-webhook-bridge/internal/openclaw"
 )
 
 // CommandHandler handles slash commands from webhook messages
@@ -16,8 +14,6 @@ type CommandHandler struct {
 
 // GatewayClient interface for OpenClaw Gateway communication
 type GatewayClient interface {
-	ListSkills() ([]openclaw.SkillInfo, error)
-	ListCommands() ([]openclaw.CommandInfo, error)
 	SendApproval(requestID string, approved bool) error
 }
 
@@ -92,65 +88,19 @@ func (h *CommandHandler) handleHelp() (string, error) {
 
 // handleCommands lists all available commands
 func (h *CommandHandler) handleCommands() (string, error) {
-	// Return static command list instead of querying Gateway
-	var response strings.Builder
-	response.WriteString("**Available Commands:**\n\n")
-
-	response.WriteString("**📊 Status**\n")
-	response.WriteString("  /help - Show this help message\n")
-	response.WriteString("  /commands - List all available commands\n")
-	response.WriteString("  /status - Show current connection status\n\n")
-
-	response.WriteString("**🛠️ Tools**\n")
-	response.WriteString("  /skill - List all available skills\n")
-	response.WriteString("  /skill <name> [args] - Run a specific skill\n\n")
-
-	response.WriteString("**⚙️ Management**\n")
-	response.WriteString("  /approve <id> [yes|no] - Approve or deny execution requests\n\n")
-
-	return response.String(), nil
+	// Forward to OpenClaw Gateway for processing
+	// The Gateway will handle /commands internally via its auto-reply system
+	return "", fmt.Errorf("FORWARD_TO_GATEWAY:/commands")
 }
 
 // handleSkill lists skills or runs a specific skill
 func (h *CommandHandler) handleSkill(args string) (string, error) {
-	// If no args provided, list all skills
+	// Forward all /skill commands to OpenClaw Gateway for processing
+	// The Gateway will handle /skill internally via its auto-reply system
 	if args == "" {
-		return h.listSkills()
+		return "", fmt.Errorf("FORWARD_TO_GATEWAY:/skill")
 	}
-
-	// If args provided, return a message indicating the skill request will be forwarded
-	// The actual execution should be handled by forwarding to OpenClaw Gateway
 	return "", fmt.Errorf("FORWARD_TO_GATEWAY:/skill %s", args)
-}
-
-// listSkills returns a list of available skills
-func (h *CommandHandler) listSkills() (string, error) {
-	// Return static skill list for common OpenClaw skills
-	var response strings.Builder
-	response.WriteString("**Available Skills:**\n\n")
-
-	// Common OpenClaw skills
-	skills := []struct {
-		name        string
-		description string
-	}{
-		{"web-search", "Search the web for information"},
-		{"read-file", "Read and analyze file contents"},
-		{"write-file", "Create or modify files"},
-		{"bash", "Execute shell commands"},
-		{"ask-human", "Ask the user for clarification"},
-	}
-
-	for _, skill := range skills {
-		response.WriteString(fmt.Sprintf("🔧 **%s**\n", skill.name))
-		response.WriteString(fmt.Sprintf("   %s\n", skill.description))
-		response.WriteString(fmt.Sprintf("   Usage: `/skill %s [args]`\n\n", skill.name))
-	}
-
-	response.WriteString("💡 **Tip**: Use `/skill <name> <args>` to run a skill\n")
-	response.WriteString("   Example: `/skill web-search OpenClaw AI`\n")
-
-	return response.String(), nil
 }
 
 // handleApprove processes approval requests

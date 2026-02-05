@@ -16,22 +16,6 @@ import (
 // The data is the raw JSON event message
 type EventCallback func(data []byte)
 
-// SkillInfo represents a skill from OpenClaw
-type SkillInfo struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Command     string `json:"command,omitempty"`
-	SkillName   string `json:"skillName,omitempty"`
-}
-
-// CommandInfo represents a command from OpenClaw
-type CommandInfo struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Category    string `json:"category,omitempty"`
-	NativeName  string `json:"nativeName,omitempty"`
-}
-
 // Client is an OpenClaw Gateway WebSocket client with persistent connection
 type Client struct {
 	port    int
@@ -352,58 +336,6 @@ func (c *Client) sendRequestAndWait(method string, params interface{}, timeout t
 	case <-c.ctx.Done():
 		return nil, fmt.Errorf("client closed")
 	}
-}
-
-// ListSkills retrieves the list of available skills from OpenClaw
-func (c *Client) ListSkills() ([]SkillInfo, error) {
-	log.Printf("[OpenClaw] Fetching skills list for agent: %s", c.agentID)
-
-	params := map[string]interface{}{
-		"agentId": c.agentID,
-	}
-
-	response, err := c.sendRequestAndWait("agent.listSkills", params, 5*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list skills: %w", err)
-	}
-
-	var result struct {
-		Data struct {
-			Skills []SkillInfo `json:"skills"`
-		} `json:"data"`
-	}
-
-	if err := json.Unmarshal(response, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse skills response: %w", err)
-	}
-
-	log.Printf("[OpenClaw] Retrieved %d skills", len(result.Data.Skills))
-	return result.Data.Skills, nil
-}
-
-// ListCommands retrieves the list of available commands from OpenClaw
-func (c *Client) ListCommands() ([]CommandInfo, error) {
-	log.Printf("[OpenClaw] Fetching commands list")
-
-	params := map[string]interface{}{}
-
-	response, err := c.sendRequestAndWait("system.listCommands", params, 5*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list commands: %w", err)
-	}
-
-	var result struct {
-		Data struct {
-			Commands []CommandInfo `json:"commands"`
-		} `json:"data"`
-	}
-
-	if err := json.Unmarshal(response, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse commands response: %w", err)
-	}
-
-	log.Printf("[OpenClaw] Retrieved %d commands", len(result.Data.Commands))
-	return result.Data.Commands, nil
 }
 
 // SendApproval sends an approval/denial for a pending request
