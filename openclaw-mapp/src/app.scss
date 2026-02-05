@@ -5,8 +5,9 @@
 @layer base {
   page {
     font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
-      "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+      -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+      "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+      sans-serif;
     font-size: 24rpx;
     line-height: 1.5;
     color: #333;
@@ -76,4 +77,17 @@
   100% {
     opacity: 0;
   }
+}
+
+/* Frosted glass effect for header and input areas */
+.header-frosted {
+  background: rgba(240, 242, 245, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.input-frosted {
+  background: rgba(240, 242, 245, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }

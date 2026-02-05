@@ -371,9 +371,9 @@ class Chat extends Component<ChatProps, ChatState> {
           {/* Main */}
           <View className="flex flex-col flex-1 min-w-0 bg-[#ECE5DD]">
             {/* Header */}
-            <View className="flex items-center h-12 px-3 bg-[#F0F2F5] border-b border-[#E9EDEF]">
+            <View className="flex items-center h-12 px-3 header-frosted border-b border-[#E9EDEF]/30">
               <View
-                className="w-9 h-9 rounded-full flex items-center justify-center active:bg-[#D1D7DB] transition-colors"
+                className="w-9 h-9 rounded-full flex items-center justify-center active:bg-white/30 transition-colors"
                 onClick={this.handleToggleSidebar}
               >
                 <Text className="text-[18px] text-[#54656F]">☰</Text>
