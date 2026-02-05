@@ -384,7 +384,6 @@ class Chat extends Component<ChatProps, ChatState> {
           <CommandPanel
             onClose={this.handleToggleCommandPanel}
             onCommandSelect={this.handleCommandSelect}
-            chatStore={chatStore}
           />
         )}
 
