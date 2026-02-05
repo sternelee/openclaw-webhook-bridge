@@ -16,6 +16,7 @@ interface ChatState {
   showSettings: boolean;
   sidebarOpen: boolean;
   showCommandPanel: boolean;
+  statusBarHeight: number;
 }
 
 @inject("chatStore")
@@ -29,12 +30,30 @@ class Chat extends Component<ChatProps, ChatState> {
       showSettings: false,
       sidebarOpen: false,
       showCommandPanel: false,
+      statusBarHeight: 44, // Default fallback
     };
   }
 
   componentDidMount() {
     this.checkConnection();
+    this.calculateStatusBarHeight();
   }
+
+  calculateStatusBarHeight = () => {
+    try {
+      const systemInfo = Taro.getSystemInfoSync();
+      const menuButton = Taro.getMenuButtonBoundingClientRect();
+
+      // 状态栏高度 = 胶囊按钮顶部位置
+      // 或者使用 systemInfo.statusBarHeight
+      const statusBarHeight = systemInfo.statusBarHeight || menuButton.top;
+
+      this.setState({ statusBarHeight });
+    } catch (error) {
+      console.error('Failed to calculate status bar height:', error);
+      // Fallback to default height (already set in constructor)
+    }
+  };
 
   componentDidUpdate(prevProps: ChatProps) {
     // Auto-scroll when new messages arrive
@@ -231,12 +250,15 @@ class Chat extends Component<ChatProps, ChatState> {
       uid,
       sessionsLoading,
     } = chatStore || {};
-    const { showSettings, sidebarOpen, showCommandPanel } = this.state;
+    const { showSettings, sidebarOpen, showCommandPanel, statusBarHeight } = this.state;
     const messageGroups = this.groupMessages(visibleMessages || []);
 
     return (
       <View className="flex h-screen bg-[#ECE5DD]">
-        <View className="flex flex-1 min-h-0">
+        {/* Status bar spacer for capsule button */}
+        <View style={{ height: statusBarHeight }} className="bg-[#ECE5DD] w-full fixed top-0 left-0 z-50" />
+
+        <View className="flex flex-1 min-h-0" style={{ paddingTop: statusBarHeight }}>
           {/* Sidebar */}
           <View
             className={`flex flex-col bg-[#111B21] text-[#D1D7DB] border-r border-[#2A3942] transition-all duration-300 ease-in-out overflow-hidden ${
