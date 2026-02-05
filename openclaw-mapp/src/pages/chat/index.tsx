@@ -369,6 +369,22 @@ class Chat extends Component<ChatProps, ChatState> {
 
           {/* Main */}
           <View className="flex flex-col flex-1 min-w-0 bg-[#ECE5DD]">
+            {/* Header */}
+            <View className="flex items-center h-12 px-3 bg-[#F0F2F5] border-b border-[#E9EDEF]">
+              <View
+                className="w-9 h-9 rounded-full flex items-center justify-center active:bg-[#D1D7DB] transition-colors"
+                onClick={this.handleToggleSidebar}
+              >
+                <Text className="text-[18px] text-[#54656F]">☰</Text>
+              </View>
+              <View className="flex-1 flex flex-col items-center justify-center">
+                <Text className="text-[15px] font-semibold text-[#111B21]">
+                  {sessionId ? sessionId : "OpenClaw"}
+                </Text>
+              </View>
+              <View className="w-9"></View>
+            </View>
+
             {/* Messages */}
             <ScrollView
               className="flex-1 relative z-[1] py-3 overflow-hidden"
@@ -409,7 +425,6 @@ class Chat extends Component<ChatProps, ChatState> {
               disabled={!connected}
               onInput={this.handleInputChange}
               onSend={this.handleSend}
-              onSidebarClick={this.handleToggleSidebar}
               onCommandClick={this.handleToggleCommandPanel}
             />
           </View>
