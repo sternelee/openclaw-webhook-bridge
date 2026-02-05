@@ -246,6 +246,7 @@ class Chat extends Component<ChatProps, ChatState> {
       sessionList,
       sessionId,
       connected,
+      streaming,
       wsUrl,
       uid,
       sessionsLoading,
@@ -378,11 +379,35 @@ class Chat extends Component<ChatProps, ChatState> {
                 <Text className="text-[18px] text-[#54656F]">☰</Text>
               </View>
               <View className="flex-1 flex flex-col items-center justify-center">
-                <Text className="text-[15px] font-semibold text-[#111B21]">
-                  {sessionId ? sessionId : "OpenClaw"}
-                </Text>
+                <View className="flex items-center gap-2">
+                  <Text className="text-[15px] font-semibold text-[#111B21]">
+                    {sessionId ? sessionId : "OpenClaw"}
+                  </Text>
+                  {streaming && (
+                    <View className="flex items-center gap-0.5">
+                      <View
+                        className="w-1 h-1 bg-[#00A884] rounded-full animate-bounce"
+                        style={{ animationDelay: "0ms" }}
+                      />
+                      <View
+                        className="w-1 h-1 bg-[#00A884] rounded-full animate-bounce"
+                        style={{ animationDelay: "150ms" }}
+                      />
+                      <View
+                        className="w-1 h-1 bg-[#00A884] rounded-full animate-bounce"
+                        style={{ animationDelay: "300ms" }}
+                      />
+                    </View>
+                  )}
+                </View>
               </View>
-              <View className="w-9"></View>
+              <View className="w-9 flex items-center justify-end">
+                {connected && (
+                  <View
+                    className={`w-2 h-2 rounded-full ${streaming ? "bg-[#00A884] animate-pulse" : "bg-[#25D366]"}`}
+                  />
+                )}
+              </View>
             </View>
 
             {/* Messages */}
