@@ -223,14 +223,31 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 func (b *Bridge) HandleOpenClawEvent(data []byte) {
 	log.Printf("[Bridge] OpenClaw -> Webhook: %s", string(data))
 
-	// Try to extract session key from OpenClaw event for route tracking
-	var event struct {
-		SessionKey string `json:"sessionKey,omitempty"`
-		Type       string `json:"type,omitempty"`
+	// Parse the event to determine its type
+	var baseEvent struct {
+		Type  string `json:"type,omitempty"`
+		Event string `json:"event,omitempty"` // For lifecycle events
 	}
-	if err := json.Unmarshal(data, &event); err == nil && event.SessionKey != "" && b.sessionStore != nil {
+	if err := json.Unmarshal(data, &baseEvent); err != nil {
+		log.Printf("[Bridge] Failed to parse event type: %v", err)
+		// Send raw data anyway
+		b.sendToWebhook(data)
+		return
+	}
+
+	// Check if this is a lifecycle event that needs special handling
+	if baseEvent.Event == "lifecycle" || baseEvent.Event == "tick" || baseEvent.Event == "presence" || baseEvent.Event == "health" {
+		// Skip internal lifecycle events
+		return
+	}
+
+	// Extract session key from event for route tracking
+	var sessionEvent struct {
+		SessionKey string `json:"sessionKey,omitempty"`
+	}
+	if err := json.Unmarshal(data, &sessionEvent); err == nil && sessionEvent.SessionKey != "" && b.sessionStore != nil {
 		// Update last route for this session
-		_, err := b.sessionStore.UpdateLastRoute(event.SessionKey, &sessions.DeliveryContext{
+		_, err := b.sessionStore.UpdateLastRoute(sessionEvent.SessionKey, &sessions.DeliveryContext{
 			Channel:   "webhook",
 			AccountId: b.uid,
 		})
@@ -239,9 +256,121 @@ func (b *Bridge) HandleOpenClawEvent(data []byte) {
 		}
 	}
 
+	// Convert OpenClaw event format to webhook format
+	convertedData := b.convertEventToWebhookFormat(data, baseEvent.Type)
+	b.sendToWebhook(convertedData)
+}
+
+// sendToWebhook sends data to the webhook client
+func (b *Bridge) sendToWebhook(data []byte) {
 	if err := b.webhookClient.Send(data); err != nil {
 		log.Printf("[Bridge] Failed to send to webhook: %v", err)
 	}
+}
+
+// convertEventToWebhookFormat converts OpenClaw event format to webhook format
+func (b *Bridge) convertEventToWebhookFormat(data []byte, eventType string) []byte {
+	// Handle "agent" events from OpenClaw Gateway
+	if eventType == "agent" {
+		var agentEvent struct {
+			Stream     string `json:"stream,omitempty"`
+			SessionKey string `json:"sessionKey,omitempty"`
+			Data       struct {
+				Text  string `json:"text,omitempty"`
+				Phase string `json:"phase,omitempty"`
+			} `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(data, &agentEvent); err == nil {
+			// Check for lifecycle events
+			if agentEvent.Stream == "lifecycle" {
+				// "end" phase means the request is complete
+				if agentEvent.Data.Phase == "end" || agentEvent.Data.Phase == "complete" {
+					// Send empty complete event to signal end
+					response := map[string]interface{}{
+						"type":    "complete",
+						"content": "",
+						"session": agentEvent.SessionKey,
+					}
+					converted, _ := json.Marshal(response)
+					return converted
+				}
+				// Skip other lifecycle phases
+				return nil
+			}
+			// "assistant" stream with text content
+			if agentEvent.Stream == "assistant" && agentEvent.Data.Text != "" {
+				response := map[string]interface{}{
+					"type":    "progress",
+					"content": agentEvent.Data.Text,
+					"session": agentEvent.SessionKey,
+				}
+				converted, _ := json.Marshal(response)
+				return converted
+			}
+			// "tool" stream - skip for cleaner output
+			if agentEvent.Stream == "tool" {
+				return nil
+			}
+		}
+	}
+
+	// Handle "chat" events from OpenClaw Gateway
+	if eventType == "chat" {
+		var chatEvent struct {
+			State      string `json:"state,omitempty"`
+			SessionKey string `json:"sessionKey,omitempty"`
+			Message    *struct {
+				Content []struct {
+					Type string `json:"type,omitempty"`
+					Text string `json:"text,omitempty"`
+				} `json:"content,omitempty"`
+			} `json:"message,omitempty"`
+		}
+		if err := json.Unmarshal(data, &chatEvent); err == nil {
+			// Extract text from content array
+			var text string
+			if chatEvent.Message != nil && len(chatEvent.Message.Content) > 0 {
+				for _, c := range chatEvent.Message.Content {
+					if c.Type == "text" {
+						text += c.Text
+					}
+				}
+			}
+			// "final" state means complete
+			if chatEvent.State == "final" {
+				response := map[string]interface{}{
+					"type":    "complete",
+					"content": text,
+					"session": chatEvent.SessionKey,
+				}
+				converted, _ := json.Marshal(response)
+				return converted
+			}
+			// "delta" state means progress (streaming)
+			if chatEvent.State == "delta" && text != "" {
+				response := map[string]interface{}{
+					"type":    "progress",
+					"content": text,
+					"session": chatEvent.SessionKey,
+				}
+				converted, _ := json.Marshal(response)
+				return converted
+			}
+			// "error" state
+			if chatEvent.State == "error" {
+				response := map[string]interface{}{
+					"type":    "error",
+					"content": "An error occurred",
+					"session": chatEvent.SessionKey,
+				}
+				converted, _ := json.Marshal(response)
+				return converted
+			}
+		}
+	}
+
+	// For unknown event types, return original data
+	return data
 }
 
 // handleSessionControlMessage handles session control messages
