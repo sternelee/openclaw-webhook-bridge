@@ -29,6 +29,8 @@ class ChatStore {
   private sessionsLoadingTimeout: any = null;
   private currentStreamingMessageId: string | null = null; // Track current streaming message ID
   private currentRunId: string | null = null; // Track current run ID to detect new conversations
+  private serverReady: boolean = false; // Track if server is ready (received tick/health)
+  private pendingSessionListRequest: boolean = false; // Track if we need to request session list after ready
 
   constructor() {
     this.loadMessages();
@@ -230,6 +232,17 @@ class ChatStore {
       return;
     }
 
+    // If server is not ready yet, mark that we need to request later
+    if (!this.serverReady) {
+      this.pendingSessionListRequest = true;
+      return;
+    }
+
+    this.doSessionListRequest();
+  };
+
+  @action
+  private doSessionListRequest = () => {
     // Clear any existing timeout
     if (this.sessionsLoadingTimeout) {
       clearTimeout(this.sessionsLoadingTimeout);
@@ -241,6 +254,7 @@ class ChatStore {
     // Set timeout to reset loading state after 5 seconds
     this.sessionsLoadingTimeout = setTimeout(() => {
       this.sessionsLoading = false;
+      this.pendingSessionListRequest = false;
       console.log("Session list request timed out");
       Taro.showToast({
         title: "获取会话列表超时",
@@ -248,16 +262,15 @@ class ChatStore {
       });
     }, 5000);
 
-    try {
-      await this.wsService.send({ type: "session.list" });
-    } catch (error) {
+    this.wsService.send({ type: "session.list" }).catch((error) => {
       console.error("Failed to request session list:", error);
       this.sessionsLoading = false;
+      this.pendingSessionListRequest = false;
       if (this.sessionsLoadingTimeout) {
         clearTimeout(this.sessionsLoadingTimeout);
         this.sessionsLoadingTimeout = null;
       }
-    }
+    });
   };
 
   @action
@@ -379,6 +392,11 @@ class ChatStore {
   private setupWebSocketHandlers() {
     this.wsService.onStatusChange((status: WebSocketStatus) => {
       this.wsStatus = status;
+      // Reset server ready state when disconnected
+      if (status === "disconnected" || status === "error") {
+        this.serverReady = false;
+        this.pendingSessionListRequest = false;
+      }
     });
 
     this.wsService.onMessage((data: any) => {
@@ -507,6 +525,20 @@ class ChatStore {
   @action
   private handleEventMessage = (data: any) => {
     const { event, payload } = data;
+
+    // Handle tick and health events - server is ready
+    if (event === "tick" || event === "health") {
+      console.log("Server ready event received:", event);
+      if (!this.serverReady) {
+        this.serverReady = true;
+        // If we were waiting to request session list, do it now
+        if (this.pendingSessionListRequest) {
+          this.pendingSessionListRequest = false;
+          this.doSessionListRequest();
+        }
+      }
+      return;
+    }
 
     // Handle session list response
     if (event === "session.list") {
