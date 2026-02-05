@@ -23,8 +23,10 @@ class MessageBubble extends Component<MessageBubbleProps> {
     const isUser = message.role === "user";
     const isError = message.status === "error";
     const messageType = message.messageType || "chat";
-    const isToolMessage = messageType === "tool_call" || messageType === "tool_result";
-    const collapsed = message.collapsed !== undefined ? message.collapsed : isToolMessage;
+    const isToolMessage =
+      messageType === "tool_call" || messageType === "tool_result";
+    const collapsed =
+      message.collapsed !== undefined ? message.collapsed : isToolMessage;
 
     // Format timestamp
     const formatTime = (timestamp: number) => {
@@ -80,7 +82,9 @@ class MessageBubble extends Component<MessageBubbleProps> {
       } catch {
         // Not JSON, just truncate
       }
-      return content.slice(0, maxLength) + (content.length > maxLength ? "..." : "");
+      return (
+        content.slice(0, maxLength) + (content.length > maxLength ? "..." : "")
+      );
     };
 
     return (
@@ -113,7 +117,9 @@ class MessageBubble extends Component<MessageBubbleProps> {
                   isGrouped ? "rounded-bl-lg" : ""
                 }`,
             isError ? "bg-[#FEF0F0] border border-[#F8CACA]" : "",
-            typeInfo ? `${typeInfo.bgColor} border ${typeInfo.borderColor}` : "",
+            typeInfo
+              ? `${typeInfo.bgColor} border ${typeInfo.borderColor}`
+              : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -165,7 +171,8 @@ class MessageBubble extends Component<MessageBubbleProps> {
                 点击展开查看完整内容
               </Text>
             </View>
-          ) : messageType === "tool_result" && message.toolResult === "error" ? (
+          ) : messageType === "tool_result" &&
+            message.toolResult === "error" ? (
             <Text
               className="text-[13px] leading-[1.4] whitespace-pre-wrap break-words text-[#DC2626]"
               userSelect
@@ -214,7 +221,7 @@ export class MessageGroup extends Component<MessageGroupProps> {
 
     return (
       <View
-        className={`flex flex-col w-full px-2 box-border ${isUser ? "items-end" : "items-start"}`}
+        className={`flex flex-col w-full pl-2 pr-4 box-border ${isUser ? "items-end" : "items-start"}`}
       >
         {messages.map((message, index) => (
           <MessageBubble

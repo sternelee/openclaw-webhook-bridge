@@ -37,7 +37,7 @@ class ChatInput extends Component<ChatInputProps> {
               className="w-9 h-9 rounded-full flex items-center justify-center text-[#54656F] active:bg-[#D1D7DB] transition-colors"
               onClick={onCommandClick}
             >
-              <Text className="text-[18px]">/</Text>
+              <Text className="text-[20px]">☰</Text>
             </View>
           )}
 
