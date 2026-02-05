@@ -38,6 +38,15 @@ class Chat extends Component<ChatProps, ChatState> {
     this.checkConnection();
   }
 
+  componentDidUpdate(prevProps: ChatProps) {
+    // Auto-scroll when new messages arrive
+    const prevMessageCount = prevProps.chatStore?.messages?.length || 0;
+    const currentMessageCount = this.props.chatStore?.messages?.length || 0;
+    if (currentMessageCount > prevMessageCount) {
+      this.scrollToBottom();
+    }
+  }
+
   componentDidShow() {
     this.scrollToBottom();
   }
