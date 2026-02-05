@@ -3,7 +3,6 @@ import { View, ScrollView, Text } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { observer, inject } from "mobx-react";
 import { ChatMessage as ChatMessageType } from "../../types/openclaw";
-import ChatHeader from "../../components/ChatHeader";
 import ChatInput from "../../components/ChatInput";
 import { MessageGroup } from "../../components/Message";
 import SettingsModal from "../../components/SettingsModal";
@@ -228,7 +227,6 @@ class Chat extends Component<ChatProps, ChatState> {
       sessionList,
       sessionId,
       connected,
-      streaming,
       wsUrl,
       uid,
       sessionsLoading,
@@ -349,15 +347,6 @@ class Chat extends Component<ChatProps, ChatState> {
 
           {/* Main */}
           <View className="flex flex-col flex-1 min-w-0 bg-[#ECE5DD]">
-            {/* Header */}
-            <ChatHeader
-              connected={connected}
-              streaming={streaming}
-              onSettings={this.handleOpenSettings}
-              onToggleSidebar={this.handleToggleSidebar}
-              subtitle={sessionId ? sessionId : "新会话"}
-            />
-
             {/* Messages */}
             <ScrollView
               className="flex-1 relative z-[1] py-3 overflow-hidden"
@@ -408,6 +397,7 @@ class Chat extends Component<ChatProps, ChatState> {
           <CommandPanel
             onClose={this.handleToggleCommandPanel}
             onCommandSelect={this.handleCommandSelect}
+            onOpenSettings={this.handleOpenSettings}
           />
         )}
 

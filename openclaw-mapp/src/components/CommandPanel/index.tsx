@@ -53,6 +53,7 @@ const COMMANDS = [
 interface Props {
   onCommandSelect: (command: string) => void
   onClose: () => void
+  onOpenSettings?: () => void
 }
 
 export default class CommandPanel extends Component<Props> {
@@ -66,7 +67,7 @@ export default class CommandPanel extends Component<Props> {
   }
 
   render() {
-    const { onClose } = this.props
+    const { onClose, onOpenSettings } = this.props
 
     return (
       <View className='command-panel-overlay' onClick={onClose}>
@@ -79,6 +80,14 @@ export default class CommandPanel extends Component<Props> {
           </View>
 
           <View className='commands-list'>
+            {/* Settings - First Item */}
+            {onOpenSettings && (
+              <View className='command-item command-item-settings' onClick={onOpenSettings}>
+                <Text className='command-desc'>Settings</Text>
+                <Text className='command-icon'>⚙️</Text>
+              </View>
+            )}
+
             {COMMANDS.map((item, index) => (
               <View
                 key={index}
