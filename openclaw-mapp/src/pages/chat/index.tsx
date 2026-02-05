@@ -131,9 +131,16 @@ class Chat extends Component<ChatProps, ChatState> {
   };
 
   handleCommandSelect = (command: string) => {
-    // Auto-fill input with the command
-    this.inputContent = command;
-    this.forceUpdate();
+    const { chatStore } = this.props;
+
+    // If command ends with space, it needs parameters - fill input
+    if (command.endsWith(' ')) {
+      this.inputContent = command;
+      this.forceUpdate();
+    } else {
+      // No parameters needed - send directly
+      chatStore.sendMessage(command);
+    }
     this.setState({ showCommandPanel: false });
   };
 
