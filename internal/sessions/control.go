@@ -22,9 +22,9 @@ const (
 // SessionControlMessage represents a session control message
 type SessionControlMessage struct {
 	Type   ControlMessageType `json:"type"`
-	Key    string            `json:"key,omitempty"`     // Session key
-	ID     string            `json:"id,omitempty"`      // Session ID (alternative to key)
-	Action string            `json:"action,omitempty"`  // Action to perform
+	Key    string             `json:"key,omitempty"`    // Session key
+	ID     string             `json:"id,omitempty"`     // Session ID (alternative to key)
+	Action string             `json:"action,omitempty"` // Action to perform
 }
 
 // SessionInfoResponse contains session information

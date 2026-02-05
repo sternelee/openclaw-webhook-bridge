@@ -1,127 +1,269 @@
 # Repository Guidelines for Agentic AI
 
-This document provides essential information for AI agents working on the `openclaw-webhook-bridge` project. Adhere strictly to these patterns to ensure consistency and safety.
+This document provides essential information for AI agents working on the **OpenClaw Webhook Bridge** project (`moltbotCNAPP`). Adhere strictly to these patterns to ensure consistency and safety.
 
 ## 1. Project Structure & Organization
 
-The project is a hybrid Go and Node.js/TypeScript codebase, primarily serving as a bridge between webhooks and the OpenClaw Gateway.
+The project is a multi-component system connecting webhooks to OpenClaw AI Gateway:
 
-- `cmd/bridge/`: Main entrypoint for the OpenClaw Bridge (Go).
-- `internal/`: Core Go packages (orchestration, clients, sessions, config, webhooks).
-- `cloudflare-webhook/`: Cloudflare Workers webhook service with Hono and Durable Objects.
-- `node-webhook/`: Node.js-based WebSocket server for local testing.
-- `scripts/`: Build and utility scripts (e.g., cross-platform packaging).
-- `dist/`: Build artifacts (not committed).
+- `cmd/bridge/`: Main Go entrypoint for the OpenClaw Bridge daemon
+- `internal/`: Core Go packages (bridge, openclaw, webhook, config, sessions)
+- `cloudflare-webhook/`: Cloudflare Workers webhook service (TypeScript, Hono, Durable Objects)
+- `node-webhook/`: Local Node.js WebSocket server for testing (ES modules)
+- `openclaw-mapp/`: WeChat Mini Program frontend (Taro, React, Tailwind CSS)
+- `scripts/`: Build utilities and cross-platform packaging scripts
+- `dist/`: Build artifacts (not committed)
 
-## 2. Build, Development, and Linting
+**Key Architecture**: Bridge connects WebSocket webhooks to OpenClaw Gateway (localhost:18789) with UID-based routing.
 
-Use the provided `Makefile` for Go-related tasks and `npm` for Node.js tasks.
+## 2. Build, Development, and Linting Commands
 
-### Go Commands
-- `make build`: Compile the bridge for the current platform into `openclaw-bridge`.
-- `make dev`: Run the bridge directly with `go run ./cmd/bridge/`.
-- `make run`: Build then execute the binary.
-- `make clean`: Remove build artifacts and clean Go cache.
-- `make tidy`: Run `go mod tidy` to sync dependencies.
-- `make fmt`: Format code with `gofmt`.
-- `make vet`: Run static analysis with `go vet`.
-- `make lint`: Run both `fmt` and `vet`.
+### Go Bridge Commands (via Makefile)
+- **Build**: `make build` - Compile for current platform → `openclaw-bridge`
+- **Build all platforms**: `make build-all` - Cross-compile via `./scripts/build.sh`
+- **Build release** (no logs): `make build-release` - Use `-tags release`
+- **Dev mode**: `make dev` - Run with `go run ./cmd/bridge/` (no compilation)
+- **Run**: `make run` - Build then execute binary
+- **Format**: `make fmt` - Run `gofmt` on all Go files
+- **Static analysis**: `make vet` - Run `go vet ./...`
+- **Lint**: `make lint` - Run both `fmt` and `vet`
+- **Test**: `make test` - Run `go test -v ./...`
+- **Clean**: `make clean` - Remove binaries and build artifacts
+- **Tidy**: `make tidy` - Sync dependencies with `go mod tidy`
+- **Install**: `make install` - Install to `$GOPATH/bin`
 
-### Node.js Commands (in `node-webhook/`)
-- `npm start`: Start the local webhook test server.
-- `npm install`: Install dependencies (primarily `ws`).
+### Testing Commands
+- **All tests**: `go test -v ./...` or `make test`
+- **Single package**: `go test -v ./internal/webhook/`
+- **Specific test**: `go test -v -run TestConnectionLoop ./internal/webhook/`
+- **With coverage**: `go test -cover ./...`
 
-### TypeScript Commands (in `cloudflare-webhook/`)
-- `pnpm dev`: Run Wrangler dev server.
-- `pnpm deploy`: Deploy to Cloudflare Workers.
-- `pnpm tail`: Tail real-time logs.
-- `tsc --noEmit`: Type check without emitting files.
+**Note**: No test files exist yet - tests should be created in `*_test.go` files alongside source.
 
-## 3. Testing Guidelines
+### Cloudflare Workers (TypeScript)
+```bash
+cd cloudflare-webhook
+pnpm dev           # Local Wrangler dev server
+pnpm deploy        # Deploy to Cloudflare
+pnpm tail          # Real-time logs
+pnpm test          # Run Vitest tests
+npx tsc --noEmit   # Type checking only
+```
 
-### Go Testing
-- **Run all tests**: `go test -v ./...` or `make test`.
-- **Run a single package**: `go test -v ./internal/sessions/`.
-- **Run a specific test**: `go test -v -run TestName ./path/to/pkg`.
-- **Conventions**:
-    - Place tests in `*_test.go` files in the same directory as the code.
-    - Use table-driven tests for complex logic.
-    - Prefer standard library `testing` package; avoid adding heavy test frameworks unless necessary.
+### Node.js Test Server
+```bash
+cd node-webhook
+npm install
+npm start          # Starts on localhost:8787
+```
 
-### Integration Testing
-- Use `node-webhook/server.js` and `test-page.html` to simulate webhook events and verify end-to-end flow.
-- Use `cloudflare-webhook` with Wrangler dev for Cloudflare Durable Objects testing.
+### WeChat Mini Program (Taro + React)
+```bash
+cd openclaw-mapp
+pnpm install           # Required: use pnpm, NOT npm
+pnpm dev:weapp         # Watch mode for WeChat DevTools
+pnpm build:weapp       # Production build
+pnpm typescript        # Type check (tsc --noEmit)
+```
 
-## 4. Coding Style & Conventions
+**IMPORTANT**: `openclaw-mapp` MUST use `pnpm` due to `weapp-tailwindcss` patch scripts in `postinstall`.
 
-### Go Style
-- **Formatting**: Always use `gofmt` (tabs for indentation).
-- **Imports**: Group imports into three blocks separated by newlines:
-    1. Standard library.
-    2. Third-party packages.
-    3. Internal project packages.
+## 3. Code Style & Conventions
+
+### Go Style (Go 1.21+)
+- **Formatting**: ALWAYS use `gofmt` (tabs, not spaces)
+- **Imports**: Three groups separated by blank lines:
+  ```go
+  import (
+      // 1. Standard library
+      "context"
+      "fmt"
+      "log"
+
+      // 2. Third-party
+      "github.com/gorilla/websocket"
+
+      // 3. Internal
+      "github.com/sternelee/openclaw-webhook-bridge/internal/config"
+  )
+  ```
 - **Naming**:
-    - Packages: Short, lowercase, single-word (e.g., `config`, `sessions`).
-    - Interfaces: Usually end in `-er` (e.g., `WebhookClient`).
-    - Exported names: PascalCase; unexported: camelCase.
-    - Variables: Short but descriptive (e.g., `msg` for message, `ctx` for context).
-- **Concurrency**:
-    - Use `sync.RWMutex` for shared state protection.
-    - Use `atomic` package for simple flags/counters.
-    - Ensure `context.Context` is passed down to long-running operations.
-
-### Node.js Style (Node Webhook Server)
-- **ES Modules**: Use `import/export` (defined in `package.json` as `"type": "module"`).
-- **Indentation**: 2 spaces (as per existing `server.js`).
-- **Async**: Prefer `async/await` over raw promises or callbacks.
+  - Packages: lowercase, single-word (`webhook`, `openclaw`, `bridge`)
+  - Exported: PascalCase (`Client`, `MessageHandler`)
+  - Unexported: camelCase (`connectionLoop`, `connMu`)
+  - Interfaces: Often `-er` suffix (`MessageHandler`, `ResponseHandler`)
+  - Acronyms: Consistent case (`URL` not `Url`, `ID` not `Id`)
+- **Types**:
+  - Use `atomic.Bool` for thread-safe flags
+  - Use `sync.RWMutex` for shared state (e.g., `connMu sync.RWMutex`)
+  - Always pass `context.Context` as first parameter in long-running funcs
+- **Comments**: Exported symbols MUST have doc comments starting with name
+  ```go
+  // Client is a WebSocket webhook client
+  type Client struct { ... }
+  ```
 
 ### TypeScript Style (Cloudflare Workers)
-- **Framework**: Hono for HTTP routing with proper TypeScript types.
-- **Durable Objects**: Use Cloudflare's `DurableObjectState` for WebSocket hibernation.
-- **Type Safety**: Export environment types (`interface Env`) for Durable Object bindings.
+- **Strict mode**: `"strict": true` in `tsconfig.json`
+- **Module**: ES2022 with `moduleResolution: "bundler"`
+- **Types**: Use Cloudflare Workers types (`@cloudflare/workers-types`)
+- **Environment**: Export `interface Env` for Durable Object bindings
+  ```typescript
+  export interface Env {
+    WEBSOCKET_HUB: DurableObjectNamespace;
+  }
+  ```
+- **Hono**: Type-safe routing with `Hono<{ Bindings: Env; Variables: Variables }>()`
+- **Formatting**: 2 spaces, semicolons, single quotes preferred
 
-## 5. Error Handling & Logging
+### TypeScript/React Style (Mini Program)
+- **Target**: ES2017 (WeChat compatibility)
+- **JSX**: `"jsx": "react-jsx"` (React 18)
+- **Strict**: `"strict": false` (legacy Taro compatibility)
+- **Decorators**: Enabled (`experimentalDecorators: true` for MobX)
+- **Paths**: Use `@/` alias for `./src/*`
+- **Formatting**: 2 spaces, match existing Taro patterns
+
+### Node.js Style (Test Server)
+- **ES Modules**: Use `import/export` (`"type": "module"` in package.json)
+- **Async**: Prefer `async/await` over callbacks
+- **Indentation**: 2 spaces
+
+## 4. Error Handling & Logging
 
 ### Go Error Handling
-- **Pattern**: Check errors immediately and return or log them.
-    ```go
-    if err := json.Unmarshal(data, &msg); err != nil {
-        return fmt.Errorf("failed to parse message: %w", err)
-    }
-    ```
-- **Wrapping**: Use `%w` with `fmt.Errorf` to wrap errors for later inspection with `errors.Is` or `errors.As`.
-- **Panic**: NEVER use `panic` in library or service code. Handle errors gracefully.
+- **Always check errors immediately**:
+  ```go
+  if err := conn.ReadMessage(); err != nil {
+      return fmt.Errorf("read error: %w", err)
+  }
+  ```
+- **Wrap errors** with `%w` for error chain inspection (`errors.Is`, `errors.As`)
+- **NEVER panic** in production code - return errors gracefully
+- **Sentinel errors**: Define package-level `var Err... = errors.New(...)`
 
-### Logging
-- **Standard**: Use the `log` package.
-- **Context**: Prefix log messages with the component name in brackets:
-    - `log.Printf("[Bridge] Webhook -> OpenClaw: %s", data)`
-    - `log.Printf("[OpenClaw] Connection error: %v", err)`
-- **Verbosity**: Avoid excessive logging in "hot" paths unless in debug mode.
+### Logging Pattern
+- **Component prefixes** in square brackets:
+  ```go
+  log.Printf("[Webhook] Connected to %s (UID: %s)", url, uid)
+  log.Printf("[OpenClaw] Connection error: %v", err)
+  log.Printf("[Bridge] Forwarding message to session: %s", session)
+  ```
+- **Privacy**: NEVER log message content (may contain sensitive data)
+  ```go
+  // ✅ Good: Don't log message content for privacy
+  log.Printf("[Webhook] Received message")
+  
+  // ❌ Bad: Exposes user data
+  log.Printf("[Webhook] Message: %s", string(message))
+  ```
+- **Verbosity**: Minimal logging in hot paths (message forwarding loops)
 
-## 6. Configuration & Security
+## 5. Configuration & Security
 
-- **Storage**: Runtime configuration defaults to `~/.openclaw/openclaw.json` and `~/.openclaw/bridge.json`.
-- **Secrets**: NEVER hardcode API keys, tokens, or credentials. Use environment variables or local config files.
-- **Validation**: Validate all external input (webhooks, gateway messages) before processing.
+- **Config files**: `~/.openclaw/openclaw.json` (gateway), `~/.openclaw/bridge.json` (bridge)
+- **Secrets**: NEVER commit tokens, API keys, or credentials
+  - Use env vars or local config files
+  - Bridge config includes UID, webhook URL, agent ID
+- **Validation**: Sanitize ALL external input (webhook messages, query params)
+- **UID requirement**: WebSocket connections MUST include `?uid=xxx` for routing
 
-## 7. Git & Pull Request Guidelines
+## 6. Concurrency & WebSocket Patterns
 
-- **Commit Messages**: Use short, imperative summaries (e.g., "Add session persistence").
-- **PR Content**:
-    - Provide a brief summary of changes.
-    - List the commands run to verify the changes.
-    - Include screenshots/GIFs if modifying the web UI (if applicable).
-- **Atomic Commits**: Keep commits focused on a single logical change.
+### Go Concurrency (Critical)
+- **Context propagation**: Always pass `context.Context` to goroutines
+  ```go
+  func (c *Client) Connect(ctx context.Context) error {
+      c.ctx, c.cancel = context.WithCancel(ctx)
+      c.wg.Add(1)
+      go c.connectionLoop() // Must respect c.ctx.Done()
+      // ...
+  }
+  ```
+- **Mutex locking**: RLock for reads, Lock for writes
+  ```go
+  c.connMu.RLock()
+  conn := c.conn
+  c.connMu.RUnlock()
+  ```
+- **Atomic flags**: Use `atomic.Bool` for `connected` state
+- **WaitGroup**: Track goroutines for graceful shutdown
 
-## 8. Development Environment Tips
+### WebSocket Reconnection
+- **Exponential backoff**: 2s → 4s → 8s → max 30s delay
+- **Auto-reconnect**: Loop until context cancelled
+- **Connection loop pattern**: See `internal/webhook/client.go` and `internal/openclaw/client.go`
 
-- **Workspace**: The project root is `/Users/sternelee/www/github/openclaw-webhook-bridge`.
-- **Dependencies**: Always check `go.mod`, `cloudflare-webhook/package.json`, and `node-webhook/package.json` before assuming a library is available.
-- **Platform**: Primarily developed and tested on `darwin` (macOS), but aimed for cross-platform compatibility.
+## 7. Testing Strategy
 
-## 9. Rules and AI Instructions
+### Go Testing (to be implemented)
+- **File naming**: `*_test.go` in same package
+- **Table-driven tests** for complex logic:
+  ```go
+  func TestParseMessage(t *testing.T) {
+      tests := []struct {
+          name    string
+          input   []byte
+          want    Message
+          wantErr bool
+      }{
+          // test cases...
+      }
+      for _, tt := range tests {
+          t.Run(tt.name, func(t *testing.T) { ... })
+      }
+  }
+  ```
+- **Standard library**: Prefer `testing` package over frameworks
+- **Mocking**: Use interfaces (`MessageHandler`, `EventCallback`)
 
-- **Cursor/Copilot**: No specific project-level rules were found in `.cursorrules` or `.github/copilot-instructions.md`. Follow the general guidelines in this document.
-- **Proactiveness**: Agents should proactively run `make lint` and `make test` after any significant code change.
-- **Self-Correction**: If a build fails, analyze the output and fix immediately without waiting for user prompting.
+### Integration Testing
+- Use `node-webhook/server.js` + `test-page.html` to simulate end-to-end flow
+- Test UID routing with multiple bridge instances
+- Verify session isolation between different UIDs
+
+## 8. Git & PR Guidelines
+
+- **Commit messages**: Short, imperative (e.g., "Add session list command", "Fix reconnection backoff")
+- **Atomic commits**: One logical change per commit
+- **PR checklist**:
+  - Run `make lint` and `make test` (Go)
+  - Run `pnpm typescript` (for TS changes)
+  - Describe what was changed and why
+  - List test commands used for verification
+
+## 9. Development Environment
+
+- **Workspace**: `/Users/sternelee/www/github/moltbotCNAPP`
+- **Platform**: Primarily macOS (darwin), but cross-platform builds supported
+- **Dependencies**:
+  - Go: Check `go.mod` (gorilla/websocket, google/uuid, skip2/go-qrcode)
+  - Cloudflare: Check `cloudflare-webhook/package.json` (hono, wrangler)
+  - Node: Check `node-webhook/package.json` (ws)
+  - Mini Program: Check `openclaw-mapp/package.json` (@tarojs/*, tailwindcss, weapp-tailwindcss)
+
+## 10. AI Agent Instructions
+
+### Proactive Actions
+- Run `make lint` after any Go code changes
+- Run `make test` after implementing features (create tests if missing)
+- Run `pnpm typescript` after TypeScript changes
+- Check for compilation errors before committing
+
+### Self-Correction
+- If build fails, analyze output and fix immediately
+- If linting fails, apply `gofmt` and address `go vet` warnings
+- Don't wait for user prompts to fix obvious issues
+
+### Best Practices
+- Prefer editing existing files over creating new ones
+- Follow existing patterns in codebase (e.g., connection loop, error wrapping)
+- Maintain privacy: don't log message contents
+- Test locally with `node-webhook` before deploying to Cloudflare
+- Use descriptive variable names matching existing style (`msg`, `ctx`, `conn`, `connMu`)
+
+### Special Notes
+- **No Cursor/Copilot rules found** - follow this document as the source of truth
+- **UID routing** is critical - ensure all WebSocket URLs include `?uid=xxx`
+- **Session isolation** - each session key should maintain independent context
+- **Tailwind in Mini Program** - uses `weapp-tailwindcss` plugin with specific build pipeline

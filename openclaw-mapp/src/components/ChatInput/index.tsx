@@ -9,6 +9,7 @@ interface ChatInputProps {
   onSend: () => void;
   onAttachment?: () => void;
   onVoice?: () => void;
+  onCommandClick?: () => void;
   maxLength?: number;
 }
 
@@ -22,6 +23,7 @@ class ChatInput extends Component<ChatInputProps> {
       onSend,
       onAttachment,
       onVoice,
+      onCommandClick,
       maxLength = 1000,
     } = this.props;
     const canSend = value.trim().length > 0 && !disabled;
@@ -29,6 +31,16 @@ class ChatInput extends Component<ChatInputProps> {
     return (
       <View className="flex flex-col px-2 pb-3 pt-2 bg-[#F0F2F5] relative z-10">
         <View className="flex items-end gap-2 w-full">
+          {/* Command button */}
+          {onCommandClick && !disabled && (
+            <View
+              className="w-9 h-9 rounded-full flex items-center justify-center text-[#54656F] active:bg-[#D1D7DB] transition-colors"
+              onClick={onCommandClick}
+            >
+              <Text className="text-[18px]">/</Text>
+            </View>
+          )}
+
           {/* Voice button */}
           {onVoice && !disabled && (
             <View

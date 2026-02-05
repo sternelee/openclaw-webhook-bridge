@@ -16,6 +16,22 @@ import (
 // The data is the raw JSON event message
 type EventCallback func(data []byte)
 
+// SkillInfo represents a skill from OpenClaw
+type SkillInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Command     string `json:"command,omitempty"`
+	SkillName   string `json:"skillName,omitempty"`
+}
+
+// CommandInfo represents a command from OpenClaw
+type CommandInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Category    string `json:"category,omitempty"`
+	NativeName  string `json:"nativeName,omitempty"`
+}
+
 // Client is an OpenClaw Gateway WebSocket client with persistent connection
 type Client struct {
 	port    int
@@ -32,14 +48,19 @@ type Client struct {
 
 	// Event callback
 	onEvent EventCallback
+
+	// Pending requests (for request/response pattern)
+	pendingRequests   map[string]chan []byte
+	pendingRequestsMu sync.RWMutex
 }
 
 // NewClient creates a new OpenClaw Gateway client
 func NewClient(port int, token, agentID string) *Client {
 	return &Client{
-		port:    port,
-		token:   token,
-		agentID: agentID,
+		port:            port,
+		token:           token,
+		agentID:         agentID,
+		pendingRequests: make(map[string]chan []byte),
 	}
 }
 
@@ -161,9 +182,40 @@ func (c *Client) connectAndRead() error {
 
 		// Don't log message content for privacy
 
+		// Check if this is a response to a pending request
+		c.handlePossibleResponse(message)
+
 		// Forward raw event to callback
 		if c.onEvent != nil {
 			c.onEvent(message)
+		}
+	}
+}
+
+// handlePossibleResponse checks if message is a response to a pending request
+func (c *Client) handlePossibleResponse(message []byte) {
+	var responseWrapper struct {
+		ID   string          `json:"id"`
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
+
+	if err := json.Unmarshal(message, &responseWrapper); err != nil {
+		return
+	}
+
+	if responseWrapper.ID == "" || responseWrapper.Type != "response" {
+		return
+	}
+
+	c.pendingRequestsMu.RLock()
+	ch, exists := c.pendingRequests[responseWrapper.ID]
+	c.pendingRequestsMu.RUnlock()
+
+	if exists {
+		select {
+		case ch <- message:
+		default:
 		}
 	}
 }
@@ -251,4 +303,122 @@ func (c *Client) SendAgentRequest(message, sessionKey string) error {
 	}
 
 	return c.SendRaw(data)
+}
+
+// sendRequestAndWait sends a request and waits for the response
+func (c *Client) sendRequestAndWait(method string, params interface{}, timeout time.Duration) ([]byte, error) {
+	if !c.connected.Load() {
+		return nil, fmt.Errorf("not connected to gateway")
+	}
+
+	requestID := fmt.Sprintf("%s:%d", method, time.Now().UnixNano())
+
+	// Create response channel
+	respChan := make(chan []byte, 1)
+	c.pendingRequestsMu.Lock()
+	c.pendingRequests[requestID] = respChan
+	c.pendingRequestsMu.Unlock()
+
+	defer func() {
+		c.pendingRequestsMu.Lock()
+		delete(c.pendingRequests, requestID)
+		c.pendingRequestsMu.Unlock()
+		close(respChan)
+	}()
+
+	// Send request
+	req := map[string]interface{}{
+		"type":   "req",
+		"id":     requestID,
+		"method": method,
+		"params": params,
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.SendRaw(data); err != nil {
+		return nil, err
+	}
+
+	// Wait for response with timeout
+	select {
+	case response := <-respChan:
+		return response, nil
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("request timeout")
+	case <-c.ctx.Done():
+		return nil, fmt.Errorf("client closed")
+	}
+}
+
+// ListSkills retrieves the list of available skills from OpenClaw
+func (c *Client) ListSkills() ([]SkillInfo, error) {
+	log.Printf("[OpenClaw] Fetching skills list for agent: %s", c.agentID)
+
+	params := map[string]interface{}{
+		"agentId": c.agentID,
+	}
+
+	response, err := c.sendRequestAndWait("agent.listSkills", params, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list skills: %w", err)
+	}
+
+	var result struct {
+		Data struct {
+			Skills []SkillInfo `json:"skills"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(response, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse skills response: %w", err)
+	}
+
+	log.Printf("[OpenClaw] Retrieved %d skills", len(result.Data.Skills))
+	return result.Data.Skills, nil
+}
+
+// ListCommands retrieves the list of available commands from OpenClaw
+func (c *Client) ListCommands() ([]CommandInfo, error) {
+	log.Printf("[OpenClaw] Fetching commands list")
+
+	params := map[string]interface{}{}
+
+	response, err := c.sendRequestAndWait("system.listCommands", params, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list commands: %w", err)
+	}
+
+	var result struct {
+		Data struct {
+			Commands []CommandInfo `json:"commands"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(response, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse commands response: %w", err)
+	}
+
+	log.Printf("[OpenClaw] Retrieved %d commands", len(result.Data.Commands))
+	return result.Data.Commands, nil
+}
+
+// SendApproval sends an approval/denial for a pending request
+func (c *Client) SendApproval(requestID string, approved bool) error {
+	log.Printf("[OpenClaw] Sending approval: requestID=%s approved=%v", requestID, approved)
+
+	params := map[string]interface{}{
+		"requestId": requestID,
+		"approved":  approved,
+	}
+
+	_, err := c.sendRequestAndWait("approval.respond", params, 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to send approval: %w", err)
+	}
+
+	return nil
 }

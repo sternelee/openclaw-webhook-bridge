@@ -19,9 +19,6 @@ new_classes = ["WebSocketHub"]
 # Production configuration
 [env.production]
 name = "openclaw-webhook-prod"
-[[durable_objects.bindings]]
-name = "WEBSOCKET_HUB"
-class_name = "WebSocketHub"
 
 # Routes for custom domain (optional)
 # routes = [

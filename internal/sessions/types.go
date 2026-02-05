@@ -47,8 +47,8 @@ type SessionEntry struct {
 	SendPolicy     string `json:"sendPolicy,omitempty"` // "allow" or "deny"
 
 	// Model overrides
-	ModelOverride     string `json:"modelOverride,omitempty"`
-	ProviderOverride  string `json:"providerOverride,omitempty"`
+	ModelOverride    string `json:"modelOverride,omitempty"`
+	ProviderOverride string `json:"providerOverride,omitempty"`
 }
 
 // DeliveryContext contains information needed to route responses

@@ -16,13 +16,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sternelee/openclaw-webhook-bridge/internal/bridge"
-	"github.com/sternelee/openclaw-webhook-bridge/internal/openclaw"
-	"github.com/sternelee/openclaw-webhook-bridge/internal/config"
-	"github.com/sternelee/openclaw-webhook-bridge/internal/sessions"
-	"github.com/sternelee/openclaw-webhook-bridge/internal/webhook"
 	"github.com/google/uuid"
 	"github.com/skip2/go-qrcode"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/bridge"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/config"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/openclaw"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/sessions"
+	"github.com/sternelee/openclaw-webhook-bridge/internal/webhook"
 )
 
 func main() {
@@ -160,8 +160,8 @@ func cmdRunRelease() {
 
 	// Create bridge
 	bridgeInstance := bridge.NewBridge(nil, clawdbotClient)
-	bridgeInstance.SetUID(cfg.UID)                // Set UID for message routing
-	bridgeInstance.SetSessionStore(sessionStore)  // Configure session store
+	bridgeInstance.SetUID(cfg.UID)               // Set UID for message routing
+	bridgeInstance.SetSessionStore(sessionStore) // Configure session store
 
 	// Set session scope from config
 	var scope sessions.SessionScope

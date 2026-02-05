@@ -7,6 +7,7 @@ import ChatHeader from "../../components/ChatHeader";
 import ChatInput from "../../components/ChatInput";
 import { MessageGroup } from "../../components/Message";
 import SettingsModal from "../../components/SettingsModal";
+import CommandPanel from "../../components/CommandPanel";
 
 interface ChatProps {
   chatStore?: any;
@@ -15,6 +16,7 @@ interface ChatProps {
 interface ChatState {
   showSettings: boolean;
   sidebarOpen: boolean;
+  showCommandPanel: boolean;
 }
 
 @inject("chatStore")
@@ -28,6 +30,7 @@ class Chat extends Component<ChatProps, ChatState> {
     this.state = {
       showSettings: false,
       sidebarOpen: false,
+      showCommandPanel: false,
     };
   }
 
@@ -123,6 +126,17 @@ class Chat extends Component<ChatProps, ChatState> {
     this.setState((prev) => ({ sidebarOpen: !prev.sidebarOpen }));
   };
 
+  handleToggleCommandPanel = () => {
+    this.setState((prev) => ({ showCommandPanel: !prev.showCommandPanel }));
+  };
+
+  handleCommandSelect = (command: string) => {
+    // Auto-fill input with the command
+    this.inputContent = command;
+    this.forceUpdate();
+    this.setState({ showCommandPanel: false });
+  };
+
   handleSelectSession = (sessionId: string) => {
     const { chatStore } = this.props;
     chatStore.setSessionId(sessionId);
@@ -192,7 +206,7 @@ class Chat extends Component<ChatProps, ChatState> {
       uid,
       sessionsLoading,
     } = chatStore || {};
-    const { showSettings, sidebarOpen } = this.state;
+    const { showSettings, sidebarOpen, showCommandPanel } = this.state;
     const messageGroups = this.groupMessages(visibleMessages || []);
 
     return (
@@ -360,9 +374,19 @@ class Chat extends Component<ChatProps, ChatState> {
               disabled={!connected}
               onInput={this.handleInputChange}
               onSend={this.handleSend}
+              onCommandClick={this.handleToggleCommandPanel}
             />
           </View>
         </View>
+
+        {/* Command Panel */}
+        {showCommandPanel && (
+          <CommandPanel
+            onClose={this.handleToggleCommandPanel}
+            onCommandSelect={this.handleCommandSelect}
+            chatStore={chatStore}
+          />
+        )}
 
         {/* Settings Modal */}
         <SettingsModal

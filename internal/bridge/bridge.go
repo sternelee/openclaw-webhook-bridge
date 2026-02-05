@@ -2,10 +2,12 @@ package bridge
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
+	"github.com/sternelee/openclaw-webhook-bridge/internal/commands"
 	"github.com/sternelee/openclaw-webhook-bridge/internal/openclaw"
 	"github.com/sternelee/openclaw-webhook-bridge/internal/sessions"
 	"github.com/sternelee/openclaw-webhook-bridge/internal/webhook"
@@ -15,6 +17,7 @@ import (
 type Bridge struct {
 	webhookClient  *webhook.Client
 	clawdbotClient *openclaw.Client
+	commandHandler *commands.CommandHandler
 	agentID        string
 	uid            string // Unique ID for this bridge instance
 	sessionStore   *sessions.Store
@@ -27,9 +30,12 @@ func NewBridge(webhookClient *webhook.Client, clawdbotClient *openclaw.Client) *
 	if clawdbotClient != nil {
 		agentID = clawdbotClient.AgentID()
 	}
+	// Create command handler with openclaw client as gateway client
+	cmdHandler := commands.NewCommandHandler(clawdbotClient)
 	return &Bridge{
 		webhookClient:  webhookClient,
 		clawdbotClient: clawdbotClient,
+		commandHandler: cmdHandler,
 		agentID:        agentID,
 		sessionScope:   sessions.SessionScopePerSender, // Default
 	}
@@ -102,6 +108,11 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 	if msg.Content == "" {
 		log.Printf("[Bridge] Skipping empty message")
 		return nil
+	}
+
+	// Check if this is a command (starts with /)
+	if commands.IsCommand(msg.Content) {
+		return b.handleCommand(msg.Content, msg.Session, msg.ID)
 	}
 
 	// Resolve session key using session scope
@@ -426,4 +437,48 @@ func normalizeContent(content string) string {
 // getCurrentTimestamp returns the current timestamp in milliseconds
 func getCurrentTimestamp() int64 {
 	return time.Now().UnixMilli()
+}
+
+// handleCommand processes a command message and sends the response back
+func (b *Bridge) handleCommand(content, session, messageID string) error {
+	log.Printf("[Bridge] Processing command: %s", content)
+
+	// Handle the command
+	response, err := b.commandHandler.HandleCommand(content)
+	if err != nil {
+		// Check if this is a forward request
+		if strings.HasPrefix(err.Error(), "FORWARD_TO_GATEWAY:") {
+			// Extract the actual command to forward
+			forwardContent := strings.TrimPrefix(err.Error(), "FORWARD_TO_GATEWAY:")
+			log.Printf("[Bridge] Forwarding to Gateway: %s", forwardContent)
+
+			// Send to OpenClaw Gateway as an agent request
+			if err := b.clawdbotClient.SendAgentRequest(forwardContent, session); err != nil {
+				log.Printf("[Bridge] Failed to forward to Gateway: %v", err)
+				return err
+			}
+
+			// Don't send a response back to webhook - let Gateway handle it
+			return nil
+		}
+
+		// Other errors - send error message
+		log.Printf("[Bridge] Command error: %v", err)
+		response = fmt.Sprintf("Error: %v", err)
+	}
+
+	// Format the response
+	responseData, err := commands.FormatCommandResponse(response, session)
+	if err != nil {
+		log.Printf("[Bridge] Failed to format command response: %v", err)
+		return err
+	}
+
+	// Send response back to webhook
+	if err := b.webhookClient.Send(responseData); err != nil {
+		log.Printf("[Bridge] Failed to send command response: %v", err)
+		return err
+	}
+
+	return nil
 }

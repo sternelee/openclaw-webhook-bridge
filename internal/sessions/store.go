@@ -174,14 +174,14 @@ func (s *Store) RecordInboundMeta(sessionKey string, webhookMsgID string, delive
 				WebhookMessageID: webhookMsgID,
 				WebhookSessionID: sessionKey,
 				// Preserve existing state
-				SystemSent:        existing.SystemSent,
-				AbortedLastRun:    existing.AbortedLastRun,
-				ThinkingLevel:     existing.ThinkingLevel,
-				VerboseLevel:      existing.VerboseLevel,
-				ReasoningLevel:    existing.ReasoningLevel,
-				SendPolicy:        existing.SendPolicy,
-				ModelOverride:     existing.ModelOverride,
-				ProviderOverride:  existing.ProviderOverride,
+				SystemSent:       existing.SystemSent,
+				AbortedLastRun:   existing.AbortedLastRun,
+				ThinkingLevel:    existing.ThinkingLevel,
+				VerboseLevel:     existing.VerboseLevel,
+				ReasoningLevel:   existing.ReasoningLevel,
+				SendPolicy:       existing.SendPolicy,
+				ModelOverride:    existing.ModelOverride,
+				ProviderOverride: existing.ProviderOverride,
 			}, nil
 		}
 
@@ -204,12 +204,12 @@ func (s *Store) RecordInboundMeta(sessionKey string, webhookMsgID string, delive
 func (s *Store) UpdateLastRoute(sessionKey string, deliveryCtx *DeliveryContext) (*SessionEntry, error) {
 	return s.UpdateEntry(sessionKey, func(existing *SessionEntry) (*SessionEntry, error) {
 		patch := &SessionEntry{
-			UpdatedAt:    time.Now().UnixMilli(),
+			UpdatedAt:       time.Now().UnixMilli(),
 			DeliveryContext: deliveryCtx,
-			LastChannel:  deliveryChannel(deliveryCtx),
-			LastTo:       deliveryTo(deliveryCtx),
-			LastAccountId: deliveryAccountId(deliveryCtx),
-			LastThreadId: deliveryThreadId(deliveryCtx),
+			LastChannel:     deliveryChannel(deliveryCtx),
+			LastTo:          deliveryTo(deliveryCtx),
+			LastAccountId:   deliveryAccountId(deliveryCtx),
+			LastThreadId:    deliveryThreadId(deliveryCtx),
 		}
 		return patch, nil
 	})

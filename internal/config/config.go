@@ -130,7 +130,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		WebhookURL: brCfg.WebhookURL,
 		OpenClaw: OpenClawConfig{
-			GatewayPort: gwCfg.Gateway.Port,
+			GatewayPort:  gwCfg.Gateway.Port,
 			GatewayToken: gwCfg.Gateway.Auth.Token,
 			AgentID:      "main",
 		},
