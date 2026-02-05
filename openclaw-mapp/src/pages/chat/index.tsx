@@ -409,6 +409,7 @@ class Chat extends Component<ChatProps, ChatState> {
               disabled={!connected}
               onInput={this.handleInputChange}
               onSend={this.handleSend}
+              onSidebarClick={this.handleToggleSidebar}
               onCommandClick={this.handleToggleCommandPanel}
             />
           </View>
