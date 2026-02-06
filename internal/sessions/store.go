@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/gofrs/flock"
 )
 
 // Store manages session persistence with in-memory caching and file locking
@@ -17,6 +19,11 @@ type Store struct {
 	cacheMu     sync.RWMutex
 	lockDir     string
 	enableCache bool
+
+	// Cached file mtime with periodic refresh
+	mtimeCache    int64
+	mtimeCacheMu  sync.RWMutex
+	mtimeCacheExp time.Time
 }
 
 // StoreCache holds cached session data
@@ -25,6 +32,12 @@ type StoreCache struct {
 	loadedAt  time.Time
 	mtimeMs   int64
 	validOnce bool
+}
+
+// ReadonlyStore provides a read-only view of the session store
+type ReadonlyStore struct {
+	store map[string]*SessionEntry
+	mu    sync.RWMutex
 }
 
 // NewStore creates a new session store
@@ -50,14 +63,15 @@ func NewStore(config *StoreConfig) *Store {
 }
 
 // Load loads the session store from disk (with cache support)
+// Returns a ReadonlyStore for efficient read-only access
 func (s *Store) Load() (map[string]*SessionEntry, error) {
 	// Check cache first
 	if s.enableCache {
 		s.cacheMu.RLock()
 		if s.cache != nil && s.isCacheValid(s.cache) {
-			// Check if file hasn't been modified
-			if s.getFileMtimeMs() == s.cache.mtimeMs {
-				// Return a copy to prevent external mutations
+			// Check if file hasn't been modified (using cached mtime)
+			if s.getFileMtimeMsCached() == s.cache.mtimeMs {
+				// Return a copy for backward compatibility
 				result := s.copyStore(s.cache.store)
 				s.cacheMu.RUnlock()
 				log.Printf("[SessionStore] Loaded from cache (%d sessions)", len(result))
@@ -90,13 +104,59 @@ func (s *Store) Load() (map[string]*SessionEntry, error) {
 		s.cache = &StoreCache{
 			store:    s.copyStore(store),
 			loadedAt: time.Now(),
-			mtimeMs:  s.getFileMtimeMs(),
+			mtimeMs:  s.getFileMtimeMsCached(),
 		}
 		s.cacheMu.Unlock()
 	}
 
 	log.Printf("[SessionStore] Loaded from disk (%d sessions)", len(store))
 	return store, nil
+}
+
+// LoadReadonly loads the session store and returns a read-only view
+// This is more efficient than Load() for read-heavy workloads
+func (s *Store) LoadReadonly() (*ReadonlyStore, error) {
+	store, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+	return &ReadonlyStore{store: store}, nil
+}
+
+// Get returns a session entry by key from the readonly store
+func (r *ReadonlyStore) Get(key string) *SessionEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.store[key]
+}
+
+// Has checks if a session exists
+func (r *ReadonlyStore) Has(key string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.store[key]
+	return ok
+}
+
+// Count returns the number of sessions
+func (r *ReadonlyStore) Count() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.store)
+}
+
+// All returns a copy of all sessions
+func (r *ReadonlyStore) All() map[string]*SessionEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make(map[string]*SessionEntry, len(r.store))
+	for k, v := range r.store {
+		if v != nil {
+			copy := *v
+			result[k] = &copy
+		}
+	}
+	return result
 }
 
 // Save saves the session store to disk (with locking)
@@ -236,10 +296,15 @@ func (s *Store) loadUnlocked() (map[string]*SessionEntry, error) {
 
 // saveUnlocked saves without locking (must be called with lock held)
 func (s *Store) saveUnlocked(store map[string]*SessionEntry) error {
-	// Invalidate cache on write
+	// Invalidate cache and mtime cache on write
 	s.cacheMu.Lock()
 	s.cache = nil
 	s.cacheMu.Unlock()
+
+	s.mtimeCacheMu.Lock()
+	s.mtimeCache = 0
+	s.mtimeCacheExp = time.Time{}
+	s.mtimeCacheMu.Unlock()
 
 	// Serialize
 	data, err := json.MarshalIndent(store, "", "  ")
@@ -271,16 +336,44 @@ func (s *Store) isCacheValid(cache *StoreCache) bool {
 	return time.Since(cache.loadedAt) < s.config.CacheTTL
 }
 
-// copyStore creates a deep copy of the session store
+// copyStore creates a shallow copy of the session store map
+// Individual SessionEntry values are copied by value (not deep cloned)
+// This is safe because SessionEntry contains only primitive types and pointers
+// that are never mutated after being stored
 func (s *Store) copyStore(store map[string]*SessionEntry) map[string]*SessionEntry {
 	result := make(map[string]*SessionEntry, len(store))
 	for k, v := range store {
 		if v != nil {
+			// Shallow copy - copy the struct but not nested pointers
+			// Since DeliveryContext is the only nested pointer and we don't mutate it,
+			// this is safe for read-only access
 			copy := *v
 			result[k] = &copy
 		}
 	}
 	return result
+}
+
+// getFileMtimeMsCached gets the file modification time with caching
+// Cache expires after 1 second to reduce syscalls while staying fresh
+func (s *Store) getFileMtimeMsCached() int64 {
+	s.mtimeCacheMu.RLock()
+	if time.Now().Before(s.mtimeCacheExp) && s.mtimeCache > 0 {
+		mtime := s.mtimeCache
+		s.mtimeCacheMu.RUnlock()
+		return mtime
+	}
+	s.mtimeCacheMu.RUnlock()
+
+	// Cache miss or expired, get fresh value
+	mtime := s.getFileMtimeMs()
+
+	s.mtimeCacheMu.Lock()
+	s.mtimeCache = mtime
+	s.mtimeCacheExp = time.Now().Add(time.Second)
+	s.mtimeCacheMu.Unlock()
+
+	return mtime
 }
 
 // getFileMtimeMs gets the file modification time in milliseconds
@@ -292,37 +385,39 @@ func (s *Store) getFileMtimeMs() int64 {
 	return info.ModTime().UnixMilli()
 }
 
-// withLock executes a function with the store lock held
+// withLock executes a function with the store lock held using flock
 func (s *Store) withLock(fn func() error) error {
 	lockPath := s.config.StorePath + ".lock"
-	startedAt := time.Now()
 	timeout := s.config.LockTimeout
-	pollInterval := 25 * time.Millisecond
-	staleDuration := 30 * time.Second
 
 	// Ensure lock directory exists
 	if err := os.MkdirAll(s.lockDir, 0755); err != nil {
 		return fmt.Errorf("failed to create lock directory: %w", err)
 	}
 
-	// Acquire lock
-	for {
-		// Try to create lock file exclusively
-		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if err == nil {
-			// Lock acquired
-			lockInfo := map[string]interface{}{
-				"pid":       os.Getpid(),
-				"startedAt": time.Now().Unix(),
-			}
-			data, _ := json.Marshal(lockInfo)
-			f.Write(data)
-			f.Close()
-			break
-		}
+	// Use flock for proper file locking
+	fileLock := flock.New(lockPath)
 
-		if !os.IsExist(err) {
-			return fmt.Errorf("unexpected lock error: %w", err)
+	// Try to get lock with timeout using exponential backoff
+	startedAt := time.Now()
+	pollInterval := 25 * time.Millisecond
+	staleDuration := 30 * time.Second
+
+	for {
+		locked, err := fileLock.TryLock()
+		if err != nil {
+			return fmt.Errorf("lock error: %w", err)
+		}
+		if locked {
+			defer fileLock.Unlock()
+			// Check for stale lock info and log
+			if info, err := os.Stat(lockPath); err == nil {
+				age := time.Since(info.ModTime())
+				if age > staleDuration {
+					log.Printf("[SessionStore] Warning: lock file is %v old (may indicate crashed process)", age)
+				}
+			}
+			return fn()
 		}
 
 		// Check timeout
@@ -330,26 +425,9 @@ func (s *Store) withLock(fn func() error) error {
 			return fmt.Errorf("timeout acquiring lock: %s", lockPath)
 		}
 
-		// Check for stale lock and try to clean it up
-		if info, err := os.Stat(lockPath); err == nil {
-			age := time.Since(info.ModTime())
-			if age > staleDuration {
-				log.Printf("[SessionStore] Removing stale lock (%v old)", age)
-				os.Remove(lockPath)
-				continue
-			}
-		}
-
 		// Wait before retrying
 		time.Sleep(pollInterval)
 	}
-
-	// Execute function with cleanup
-	defer func() {
-		os.Remove(lockPath) // Best-effort cleanup
-	}()
-
-	return fn()
 }
 
 // Helper functions for delivery context

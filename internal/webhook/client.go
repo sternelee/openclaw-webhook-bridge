@@ -32,14 +32,18 @@ type Client struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+
+	// Connection state notification
+	connCond *sync.Cond
 }
 
 // NewClient creates a new webhook client
 func NewClient(url string, handler MessageHandler, uid string) *Client {
 	return &Client{
-		url:     url,
-		uid:     uid,
-		handler: handler,
+		url:      url,
+		uid:      uid,
+		handler:  handler,
+		connCond: sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -56,16 +60,39 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.wg.Add(1)
 	go c.connectionLoop()
 
-	// Wait for connection to be established
-	for i := 0; i < 50; i++ {
-		if c.connected.Load() {
-			log.Printf("[Webhook] Connected to %s (UID: %s)", c.url, c.uid)
-			return nil
+	// Wait for connection to be established using condition variable
+	c.connCond.L.Lock()
+	defer c.connCond.L.Unlock()
+
+	timeout := time.NewTimer(5 * time.Second)
+	defer timeout.Stop()
+
+	for !c.connected.Load() {
+		select {
+		case <-c.ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for connection")
+		case <-timeout.C:
+			return fmt.Errorf("timeout connecting to webhook server")
+		default:
+			// Wait for signal with timeout
+			done := make(chan struct{})
+			go func() {
+				c.connCond.Wait()
+				close(done)
+			}()
+			select {
+			case <-done:
+				// Woke up from Wait, check connected again
+			case <-timeout.C:
+				return fmt.Errorf("timeout connecting to webhook server")
+			case <-c.ctx.Done():
+				return fmt.Errorf("context cancelled while waiting for connection")
+			}
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
 
-	return fmt.Errorf("timeout connecting to webhook server")
+	log.Printf("[Webhook] Connected to %s (UID: %s)", c.url, c.uid)
+	return nil
 }
 
 // Close gracefully shuts down the connection
@@ -73,6 +100,10 @@ func (c *Client) Close() error {
 	log.Printf("[Webhook] Closing connection...")
 
 	c.cancel()
+
+	// Wake up any waiters
+	c.connCond.Broadcast()
+
 	c.wg.Wait()
 
 	c.connMu.Lock()
@@ -149,7 +180,11 @@ func (c *Client) connectAndRead() error {
 	c.connMu.Unlock()
 
 	c.connected.Store(true)
-	defer c.connected.Store(false)
+	c.connCond.Broadcast() // Wake up any waiters
+	defer func() {
+		c.connected.Store(false)
+		c.connCond.Broadcast() // Wake up any waiters on disconnect
+	}()
 
 	// Read messages
 	for {
@@ -171,6 +206,11 @@ func (c *Client) connectAndRead() error {
 
 // Send forwards raw JSON data to the webhook (from OpenClaw)
 func (c *Client) Send(data []byte) error {
+	// Early return if not connected to avoid acquiring lock unnecessarily
+	if !c.connected.Load() {
+		return fmt.Errorf("not connected")
+	}
+
 	c.connMu.RLock()
 	conn := c.conn
 	c.connMu.RUnlock()

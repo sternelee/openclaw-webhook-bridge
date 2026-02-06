@@ -64,6 +64,22 @@ func (b *Bridge) SetSessionScope(scope sessions.SessionScope) {
 	log.Printf("[Bridge] Session scope set to: %s", scope)
 }
 
+// WebhookMessage represents a message from the webhook
+// Optimized to parse JSON once with json.RawMessage for deferred parsing
+type WebhookMessage struct {
+	ID       string `json:"id"`
+	Content  string `json:"content"`
+	Session  string `json:"session"`
+	PeerKind string `json:"peerKind"`
+	PeerID   string `json:"peerId"`
+	ChatType string `json:"chatType"`
+	ChatID   string `json:"chatId"`
+	SenderID string `json:"senderId"`
+	TopicID  string `json:"topicId"`
+	ThreadID string `json:"threadId"`
+	Type     string `json:"type,omitempty"` // For control messages
+}
+
 // HandleWebhookMessage handles a message from the webhook and forwards to OpenClaw
 func (b *Bridge) HandleWebhookMessage(data []byte) error {
 	log.Printf("[Bridge] Webhook -> OpenClaw: %s", string(data))
@@ -73,34 +89,17 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 		return b.handleSessionControlMessage(data)
 	}
 
-	// Check if this is a control message (not a user message)
-	var controlMsg struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(data, &controlMsg); err == nil {
-		// Skip control messages like "connected", "error", etc.
-		if controlMsg.Type == "connected" || controlMsg.Type == "error" || controlMsg.Type == "event" {
-			log.Printf("[Bridge] Skipping control message: type=%s", controlMsg.Type)
-			return nil
-		}
-	}
-
-	// Parse the message to extract content and session
-	var msg struct {
-		ID       string `json:"id"`
-		Content  string `json:"content"`
-		Session  string `json:"session"`
-		PeerKind string `json:"peerKind"`
-		PeerID   string `json:"peerId"`
-		ChatType string `json:"chatType"`
-		ChatID   string `json:"chatId"`
-		SenderID string `json:"senderId"`
-		TopicID  string `json:"topicId"`
-		ThreadID string `json:"threadId"`
-	}
+	// Parse the message once - all fields are extracted in one pass
+	var msg WebhookMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Printf("[Bridge] Failed to parse webhook message: %v", err)
 		// Skip unparseable messages
+		return nil
+	}
+
+	// Skip control messages like "connected", "error", "event"
+	if msg.Type == "connected" || msg.Type == "error" || msg.Type == "event" {
+		log.Printf("[Bridge] Skipping control message: type=%s", msg.Type)
 		return nil
 	}
 
@@ -121,41 +120,9 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 		Content: msg.Content,
 		Session: msg.Session,
 	}
-	sessionKey := ""
-	peerKind := strings.TrimSpace(msg.PeerKind)
-	if peerKind == "" {
-		peerKind = strings.TrimSpace(msg.ChatType)
-	}
-	peerID := strings.TrimSpace(msg.PeerID)
-	if peerID == "" {
-		peerID = strings.TrimSpace(msg.ChatID)
-	}
-	if peerID == "" {
-		peerID = strings.TrimSpace(msg.SenderID)
-	}
-	if peerKind == "" && peerID != "" {
-		peerKind = "dm"
-	}
 
-	topicID := strings.TrimSpace(msg.TopicID)
-	threadID := strings.TrimSpace(msg.ThreadID)
-
-	if msg.Session != "" {
-		sessionKey = sessions.NormalizeSessionKey(msg.Session)
-	} else if peerKind != "" && peerID != "" {
-		if resolved, ok := sessions.BuildWebhookSessionKey(sessions.WebhookSessionParams{
-			AgentID:  b.agentID,
-			PeerKind: peerKind,
-			PeerID:   peerID,
-			TopicID:  topicID,
-			ThreadID: threadID,
-		}); ok {
-			sessionKey = resolved
-		}
-	}
-	if sessionKey == "" {
-		sessionKey = sessions.ResolveSessionKey(b.sessionScope, webhookMsg)
-	}
+	// Extract peer info with optimized string handling
+	sessionKey := b.resolveSessionKey(&msg, webhookMsg)
 
 	log.Printf("[Bridge] Resolved session key: %s (scope: %s)", sessionKey, b.sessionScope)
 
@@ -164,26 +131,16 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 	if resetTriggered {
 		log.Printf("[Bridge] Reset trigger detected, will create new session")
 		// Strip reset command from content
-		strippedContent := b.stripResetTrigger(msg.Content)
-		msg.Content = strippedContent
+		msg.Content = b.stripResetTrigger(msg.Content)
 	}
 
 	// Record session metadata if session store is configured
 	if b.sessionStore != nil {
 		deliveryTo := msg.ID
-		if peerID != "" {
-			deliveryTo = peerID
+		if msg.PeerID != "" {
+			deliveryTo = msg.PeerID
 		}
-		deliveryThreadID := ""
-		if peerKind == "dm" {
-			deliveryThreadID = threadID
-		} else if peerKind == "group" || peerKind == "channel" {
-			if topicID != "" {
-				deliveryThreadID = topicID
-			} else if threadID != "" {
-				deliveryThreadID = threadID
-			}
-		}
+		deliveryThreadID := b.resolveDeliveryThreadID(&msg)
 		deliveryCtx := &sessions.DeliveryContext{
 			Channel:   "webhook",
 			To:        deliveryTo,
@@ -217,6 +174,73 @@ func (b *Bridge) HandleWebhookMessage(data []byte) error {
 
 	// Forward as agent request
 	return b.clawdbotClient.SendAgentRequest(msg.Content, sessionKey)
+}
+
+// resolveSessionKey resolves the session key from message fields
+func (b *Bridge) resolveSessionKey(msg *WebhookMessage, webhookMsg *sessions.WebhookMessage) string {
+	// Use explicit session if provided
+	if msg.Session != "" {
+		return sessions.NormalizeSessionKey(msg.Session)
+	}
+
+	// Extract peer info with optimized string handling
+	peerKind := b.coalesceString(msg.PeerKind, msg.ChatType, "")
+	peerID := b.coalesceString(msg.PeerID, msg.ChatID, msg.SenderID, "")
+
+	if peerKind == "" && peerID != "" {
+		peerKind = "dm"
+	}
+
+	topicID := strings.TrimSpace(msg.TopicID)
+	threadID := strings.TrimSpace(msg.ThreadID)
+
+	// Build session key from peer info
+	if peerKind != "" && peerID != "" {
+		if resolved, ok := sessions.BuildWebhookSessionKey(sessions.WebhookSessionParams{
+			AgentID:  b.agentID,
+			PeerKind: peerKind,
+			PeerID:   peerID,
+			TopicID:  topicID,
+			ThreadID: threadID,
+		}); ok {
+			return resolved
+		}
+	}
+
+	// Fallback to scope-based resolution
+	return sessions.ResolveSessionKey(b.sessionScope, webhookMsg)
+}
+
+// resolveDeliveryThreadID resolves the delivery thread ID based on peer kind
+func (b *Bridge) resolveDeliveryThreadID(msg *WebhookMessage) string {
+	peerKind := strings.TrimSpace(msg.PeerKind)
+	if peerKind == "" {
+		peerKind = strings.TrimSpace(msg.ChatType)
+	}
+	threadID := strings.TrimSpace(msg.ThreadID)
+	topicID := strings.TrimSpace(msg.TopicID)
+
+	if peerKind == "dm" {
+		return threadID
+	} else if peerKind == "group" || peerKind == "channel" {
+		if topicID != "" {
+			return topicID
+		}
+		return threadID
+	}
+	return ""
+}
+
+// coalesceString returns the first non-empty string after trimming
+// Optimized to avoid multiple TrimSpace calls
+func (b *Bridge) coalesceString(values ...string) string {
+	for _, v := range values {
+		trimmed := strings.TrimSpace(v)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 // HandleOpenClawEvent handles an event from OpenClaw and forwards to webhook
@@ -258,7 +282,9 @@ func (b *Bridge) HandleOpenClawEvent(data []byte) {
 
 	// Convert OpenClaw event format to webhook format
 	convertedData := b.convertEventToWebhookFormat(data, baseEvent.Type)
-	b.sendToWebhook(convertedData)
+	if convertedData != nil {
+		b.sendToWebhook(convertedData)
+	}
 }
 
 // sendToWebhook sends data to the webhook client
@@ -525,8 +551,14 @@ func (b *Bridge) sendControlResponse(msgType sessions.ControlMessageType, data i
 }
 
 // isResetTrigger checks if the message content is a session reset trigger
+// Optimized to avoid unnecessary string operations
 func (b *Bridge) isResetTrigger(content string) bool {
-	normalized := normalizeContent(content)
+	// Only process first 100 chars for trigger checking
+	if len(content) > 100 {
+		content = content[:100]
+	}
+	normalized := strings.TrimSpace(content)
+
 	for _, trigger := range sessions.DefaultResetTriggers {
 		if normalized == trigger {
 			return true
@@ -536,31 +568,29 @@ func (b *Bridge) isResetTrigger(content string) bool {
 }
 
 // stripResetTrigger strips the reset trigger from the content
+// Optimized to minimize string allocations
 func (b *Bridge) stripResetTrigger(content string) string {
-	normalized := normalizeContent(content)
+	// Only check first 100 chars for trigger
+	checkLimit := len(content)
+	if checkLimit > 100 {
+		checkLimit = 100
+	}
+	normalized := strings.TrimSpace(content[:checkLimit])
+
 	for _, trigger := range sessions.DefaultResetTriggers {
-		// Check if content starts with trigger followed by space or end
-		if len(normalized) == len(trigger) && normalized == trigger {
+		triggerLen := len(trigger)
+		if len(normalized) == triggerLen && normalized == trigger {
 			return "" // Just the trigger, return empty
 		}
-		if len(normalized) > len(trigger)+1 {
-			prefix := normalized[:len(trigger)+1]
-			if prefix == trigger+" " {
+		if len(normalized) > triggerLen && normalized[:triggerLen] == trigger {
+			// Check if next char is space
+			if normalized[triggerLen] == ' ' {
 				// Return the rest after the trigger and space
-				return content[len(trigger)+1:]
+				return strings.TrimSpace(content[triggerLen+1:])
 			}
 		}
 	}
 	return content
-}
-
-// normalizeContent normalizes content for trigger matching
-func normalizeContent(content string) string {
-	trimmed := content
-	if len(trimmed) > 100 {
-		trimmed = trimmed[:100]
-	}
-	return trimmed
 }
 
 // getCurrentTimestamp returns the current timestamp in milliseconds

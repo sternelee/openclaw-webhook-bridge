@@ -30,12 +30,41 @@ type Client struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 
+	// Connection state notification
+	connCond *sync.Cond
+
 	// Event callback
 	onEvent EventCallback
 
 	// Pending requests (for request/response pattern)
 	pendingRequests   map[string]chan []byte
 	pendingRequestsMu sync.RWMutex
+}
+
+// requestPool is a sync.Pool for reusing request objects
+var requestPool = sync.Pool{
+	New: func() interface{} {
+		return &agentRequest{
+			Params: &agentRequestParams{},
+		}
+	},
+}
+
+// agentRequest represents a request to OpenClaw Gateway
+type agentRequest struct {
+	Type   string              `json:"type"`
+	ID     string              `json:"id"`
+	Method string              `json:"method"`
+	Params *agentRequestParams `json:"params"`
+}
+
+// agentRequestParams represents the parameters for an agent request
+type agentRequestParams struct {
+	Message        string `json:"message"`
+	AgentID        string `json:"agentId"`
+	SessionKey     string `json:"sessionKey"`
+	Deliver        bool   `json:"deliver"`
+	IdempotencyKey string `json:"idempotencyKey"`
 }
 
 // NewClient creates a new OpenClaw Gateway client
@@ -45,6 +74,7 @@ func NewClient(port int, token, agentID string) *Client {
 		token:           token,
 		agentID:         agentID,
 		pendingRequests: make(map[string]chan []byte),
+		connCond:        sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -66,16 +96,39 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.wg.Add(1)
 	go c.connectionLoop()
 
-	// Wait for connection to be established
-	for i := 0; i < 50; i++ {
-		if c.connected.Load() {
-			log.Printf("[OpenClaw] Connected to gateway")
-			return nil
+	// Wait for connection to be established using condition variable
+	c.connCond.L.Lock()
+	defer c.connCond.L.Unlock()
+
+	timeout := time.NewTimer(5 * time.Second)
+	defer timeout.Stop()
+
+	for !c.connected.Load() {
+		select {
+		case <-c.ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for connection")
+		case <-timeout.C:
+			return fmt.Errorf("timeout connecting to gateway")
+		default:
+			// Wait for signal with timeout
+			done := make(chan struct{})
+			go func() {
+				c.connCond.Wait()
+				close(done)
+			}()
+			select {
+			case <-done:
+				// Woke up from Wait, check connected again
+			case <-timeout.C:
+				return fmt.Errorf("timeout connecting to gateway")
+			case <-c.ctx.Done():
+				return fmt.Errorf("context cancelled while waiting for connection")
+			}
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
 
-	return fmt.Errorf("timeout connecting to gateway")
+	log.Printf("[OpenClaw] Connected to gateway")
+	return nil
 }
 
 // Close gracefully shuts down the connection
@@ -83,6 +136,10 @@ func (c *Client) Close() error {
 	log.Printf("[OpenClaw] Closing connection...")
 
 	c.cancel()
+
+	// Wake up any waiters
+	c.connCond.Broadcast()
+
 	c.wg.Wait()
 
 	c.connMu.Lock()
@@ -155,7 +212,11 @@ func (c *Client) connectAndRead() error {
 	}
 
 	c.connected.Store(true)
-	defer c.connected.Store(false)
+	c.connCond.Broadcast() // Wake up any waiters
+	defer func() {
+		c.connected.Store(false)
+		c.connCond.Broadcast() // Wake up any waiters on disconnect
+	}()
 
 	// Read messages and forward to callback
 	for {
@@ -234,19 +295,35 @@ func (c *Client) sendConnectRequest(conn *websocket.Conn) error {
 
 // SendRaw sends raw JSON data to OpenClaw Gateway
 func (c *Client) SendRaw(data []byte) error {
-	// Wait for connection
-	for i := 0; i < 100; i++ {
-		if c.connected.Load() {
-			break
-		}
-		if i == 0 {
-			log.Printf("[OpenClaw] Waiting for connection...")
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	// Wait for connection with condition variable
+	c.connCond.L.Lock()
+	defer c.connCond.L.Unlock()
 
-	if !c.connected.Load() {
-		return fmt.Errorf("not connected to gateway")
+	timeout := time.NewTimer(5 * time.Second)
+	defer timeout.Stop()
+
+	for !c.connected.Load() {
+		select {
+		case <-c.ctx.Done():
+			return fmt.Errorf("client closed")
+		case <-timeout.C:
+			return fmt.Errorf("timeout waiting for connection")
+		default:
+			// Wait for signal with timeout
+			done := make(chan struct{})
+			go func() {
+				c.connCond.Wait()
+				close(done)
+			}()
+			select {
+			case <-done:
+				// Woke up from Wait, check connected again
+			case <-timeout.C:
+				return fmt.Errorf("timeout waiting for connection")
+			case <-c.ctx.Done():
+				return fmt.Errorf("client closed")
+			}
+		}
 	}
 
 	c.connMu.RLock()
@@ -266,20 +343,34 @@ func (c *Client) SendRaw(data []byte) error {
 	return nil
 }
 
-// SendAgentRequest sends an agent request to OpenClaw
+// SendAgentRequest sends an agent request to OpenClaw using object pooling
 func (c *Client) SendAgentRequest(message, sessionKey string) error {
-	req := map[string]interface{}{
-		"type":   "req",
-		"id":     fmt.Sprintf("agent:%d", time.Now().UnixNano()),
-		"method": "agent",
-		"params": map[string]interface{}{
-			"message":        message,
-			"agentId":        c.agentID,
-			"sessionKey":     sessionKey,
-			"deliver":        true,
-			"idempotencyKey": fmt.Sprintf("%d", time.Now().UnixNano()),
-		},
-	}
+	// Get request from pool
+	req := requestPool.Get().(*agentRequest)
+	defer func() {
+		// Reset and return to pool
+		req.Type = ""
+		req.ID = ""
+		req.Method = ""
+		if req.Params != nil {
+			req.Params.Message = ""
+			req.Params.AgentID = ""
+			req.Params.SessionKey = ""
+			req.Params.IdempotencyKey = ""
+		}
+		requestPool.Put(req)
+	}()
+
+	// Populate request
+	now := time.Now().UnixNano()
+	req.Type = "req"
+	req.ID = fmt.Sprintf("agent:%d", now)
+	req.Method = "agent"
+	req.Params.Message = message
+	req.Params.AgentID = c.agentID
+	req.Params.SessionKey = sessionKey
+	req.Params.Deliver = true
+	req.Params.IdempotencyKey = fmt.Sprintf("%d", now)
 
 	data, err := json.Marshal(req)
 	if err != nil {
