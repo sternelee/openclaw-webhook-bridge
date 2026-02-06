@@ -35,6 +35,11 @@ type openclawJSON struct {
 			Token string `json:"token"`
 		} `json:"auth"`
 	} `json:"gateway"`
+	Channels struct {
+		Webhook *struct {
+			AgentID string `json:"agentId"`
+		} `json:"webhook"`
+	} `json:"channels"`
 }
 
 // bridgeJSON matches ~/.openclaw/bridge.json
@@ -132,12 +137,15 @@ func Load() (*Config, error) {
 		OpenClaw: OpenClawConfig{
 			GatewayPort:  gwCfg.Gateway.Port,
 			GatewayToken: gwCfg.Gateway.Auth.Token,
-			AgentID:      "main",
+			AgentID:      "main", // Default fallback
 		},
 	}
 
+	// Priority: bridge.json agent_id > openclaw.json channels.webhook.agentId > "main"
 	if brCfg.AgentID != "" {
 		cfg.OpenClaw.AgentID = brCfg.AgentID
+	} else if gwCfg.Channels.Webhook != nil && gwCfg.Channels.Webhook.AgentID != "" {
+		cfg.OpenClaw.AgentID = gwCfg.Channels.Webhook.AgentID
 	}
 	if cfg.OpenClaw.GatewayPort == 0 {
 		cfg.OpenClaw.GatewayPort = 18789
