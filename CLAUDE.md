@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OpenClaw is an AI assistant system with three main components:
+OpenClaw is an AI assistant system with four main components:
 
 1. **Go Bridge** (`cmd/bridge/main.go`) - Production daemon connecting webhook to OpenClaw Gateway
 2. **Cloudflare Workers Webhook** (`cloudflare-webhook/`) - Durable Object-based WebSocket service with Hono
 3. **WeChat Mini-Program** (`openclaw-mapp/`) - Taro-based React client for chatting with OpenClaw
+4. **Next.js Web App** (`openclaw-app/`) - Web client using OpenNext for Cloudflare deployment
 
 ### System Architecture
 
@@ -17,23 +18,28 @@ OpenClaw is an AI assistant system with three main components:
 │ WeChat Mini-    │◄──────────────────►│ Cloudflare       │
 │ Program (Taro)  │    (ws://...?uid)  │ Workers Webhook  │
 └─────────────────┘                     └────────┬─────────┘
-                                                │
-                                                │ Durable Object
-                                                │ (single global,
-                                                │  routes by UID)
-                                                ▼
-                                       ┌──────────────────┐
-                                       │ Go Bridge         │
-                                       │ (connects to     │
-                                       │  OpenClaw)       │
-                                       └────────┬─────────┘
-                                                │
-                                                ▼
-                                       ┌──────────────────┐
-                                       │ OpenClaw         │
-                                       │ AI Gateway       │
-                                       │ (localhost:18789)│
-                                       └──────────────────┘
+                                               │
+┌─────────────────┐                           │
+│ Next.js Web App │◄──────────────────────────┘
+│ (OpenNext/CF)   │
+└─────────────────┘
+                                               │
+                                               │ Durable Object
+                                               │ (single global,
+                                               │  routes by UID)
+                                               ▼
+                                      ┌──────────────────┐
+                                      │ Go Bridge         │
+                                      │ (connects to     │
+                                      │  OpenClaw)       │
+                                      └────────┬─────────┘
+                                               │
+                                               ▼
+                                      ┌──────────────────┐
+                                      │ OpenClaw         │
+                                      │ AI Gateway       │
+                                      │ (localhost:18789)│
+                                      └──────────────────┘
 ```
 
 ## Component 1: Go Bridge
@@ -223,6 +229,61 @@ class SettingsPage extends Component {
 }
 ```
 
+## Component 4: Next.js Web App
+
+The web app is built with Next.js 16 and React 19, designed for deployment on Cloudflare Workers via OpenNext.
+
+### Web App Architecture
+
+- **Framework**: Next.js 16 with React 19 and TypeScript
+- **Deployment**: OpenNext for Cloudflare Workers (`@opennextjs/cloudflare`)
+- **Styling**: Tailwind CSS v4 with Radix UI components
+- **Key Files**:
+  - `src/app/layout.tsx` - Root layout
+  - `src/app/page.tsx` - Home page
+  - `open-next.config.ts` - OpenNext configuration
+  - `wrangler.jsonc` - Cloudflare configuration
+
+### Web App Build Commands
+
+```bash
+cd openclaw-app
+
+# Install dependencies
+pnpm install
+
+# Development server (localhost:3000)
+pnpm dev
+# or
+next dev
+
+# Production build
+pnpm build
+
+# Start production server
+pnpm start
+
+# Deploy to Cloudflare via OpenNext
+pnpm deploy
+# or
+opennextjs-cloudflare build && opennextjs-cloudflare deploy
+
+# Preview locally on Cloudflare runtime
+pnpm preview
+# or
+opennextjs-cloudflare build && opennextjs-cloudflare preview
+```
+
+### Web App Configuration
+
+- **Next Config**: `next.config.ts` - Standard Next.js configuration with OpenNext dev init
+- **OpenNext Config**: `open-next.config.ts` - OpenNext-specific Cloudflare settings
+- **Wrangler Config**: `wrangler.jsonc` - Cloudflare Worker bindings and environment
+
+### Important: Cloudflare Bindings in Development
+
+The app initializes OpenNext Cloudflare bindings for development in `next.config.ts`. This enables `getCloudflareContext()` calls during local development. See [OpenNext documentation](https://opennext.js.org/cloudflare/bindings#local-access-to-bindings) for details.
+
 ## Running the Complete System
 
 ### Node.js Webhook Server (Local Testing)
@@ -235,7 +296,7 @@ npm install
 npm start
 ```
 
-Then connect the Go bridge to `ws://localhost:8080/ws`. A test page is available at `http://localhost:8080`.
+Then connect the Go bridge to `ws://localhost:8787/ws`. A test page is available at `http://localhost:8787`.
 
 ### Full System Startup Sequence
 
@@ -252,19 +313,26 @@ Then connect the Go bridge to `ws://localhost:8080/ws`. A test page is available
    ./openclaw-bridge start webhook_url=wss://your-worker.workers.dev/ws
    ```
 
-4. **Build and Run Mini-Program**:
+4. **Optionally build and run clients**:
+
+   **WeChat Mini-Program**:
    ```bash
    cd openclaw-mapp
    pnpm dev:weapp
    # Open WeChat Developer Tools and import the dist/ directory
    ```
 
-5. **Configure Mini-Program**:
-   - Open the mini-program
-   - Go to Settings page
-   - Enter WebSocket URL (e.g., `wss://your-worker.workers.dev`)
-   - Enter Bridge UID (check `~/.openclaw/bridge.json` or bridge logs)
-   - Tap "Connect Server"
+   **Next.js Web App**:
+   ```bash
+   cd openclaw-app
+   pnpm dev          # Local development on localhost:3000
+   # or
+   pnpm deploy       # Deploy to Cloudflare via OpenNext
+   ```
+
+5. **Configure client**:
+   - For Mini-Program: Go to Settings page, enter WebSocket URL and Bridge UID, tap "Connect Server"
+   - For Web App: Configure connection through the UI (implementation varies by app state)
 
 ## UID-Based Routing System
 
@@ -302,7 +370,7 @@ This design allows multiple bridges and multiple clients to connect to the same 
 ## File Structure Reference
 
 ```
-openclaw-webhook-bridge/
+openclaw-run/
 ├── cmd/bridge/              # Go bridge entry point
 │   ├── main.go              # CLI and daemon management
 │   ├── daemon_unix.go       # Unix daemon implementation
@@ -328,23 +396,23 @@ openclaw-webhook-bridge/
 │   │   ├── app.tsx          # App entry point
 │   │   ├── app.config.ts    # Page routes, component registration
 │   │   ├── components/      # Reusable components
-│   │   │   ├── towxml-build/ # Markdown rendering library
-│   │   │   ├── ChatHeader/
-│   │   │   ├── ChatInput/
-│   │   │   ├── Message/
-│   │   │   ├── SettingsModal/
-│   │   │   └── TypingIndicator/
 │   │   ├── pages/           # Page components
-│   │   │   ├── chat/
-│   │   │   ├── settings/
-│   │   │   └── welcome/
 │   │   ├── services/        # WebSocket service
 │   │   ├── store/           # MobX stores
 │   │   └── types/           # TypeScript definitions
 │   ├── config/              # Taro build config
 │   └── package.json
+├── openclaw-app/            # Next.js web app (OpenNext for Cloudflare)
+│   ├── src/
+│   │   └── app/             # Next.js app directory
+│   ├── open-next.config.ts  # OpenNext configuration
+│   ├── next.config.ts       # Next.js configuration
+│   └── package.json
 ├── Makefile                 # Go build commands
 ├── go.mod, go.sum           # Go dependencies
+├── CLAUDE.md                # This file - AI agent guidance
+├── AGENTS.md                # Additional AI agent guidelines
+├── SESSION_CONTROL.md       # Session control protocol documentation
 └── README.md                # User-facing documentation
 ```
 
@@ -359,9 +427,9 @@ When adding daemon-related changes, ensure both platforms are handled.
 
 ## WebSocket Protocol Details
 
-### Mini-Program → Webhook (incoming)
+### Client → Webhook (incoming)
 
-The mini-program sends JSON messages to the webhook:
+Clients (Mini-Program, Web App, or other) send JSON messages to the webhook:
 
 ```json
 {
@@ -380,9 +448,9 @@ wss://worker.workers.dev/ws?uid=<bridge-uid>
 
 Same format as mini-program messages. Control messages with `type` field are filtered out.
 
-### Webhook → Mini-Program (streaming response)
+### Webhook → Client (streaming response)
 
-The webhook/bridge sends streaming responses back to the mini-program:
+The webhook/bridge sends streaming responses back to clients (Mini-Program, Web App, etc):
 
 **Progress (streaming):**
 ```json
