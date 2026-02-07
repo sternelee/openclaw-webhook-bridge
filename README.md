@@ -2,8 +2,20 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?flat&logo=go)](https://go.dev/)
+[![Rust Version](https://img.shields.io/badge/Rust-1.70+-orange?flat&logo=rust)](https://www.rust-lang.org/)
 
 连接 WebSocket Webhook 服务与 OpenClaw AI Agent 的桥接服务。
+
+## 🆕 Rust 实现
+
+现在提供 **Rust 版本**实现，具有更好的性能和内存安全性！
+
+- 📁 详细文档: [RUST_README.md](./RUST_README.md)
+- 🚀 特点: 异步 I/O、类型安全、零成本抽象
+- 📦 二进制大小: ~2.7MB (stripped)
+- 🔧 构建: `cargo build --release` 或 `make -f Makefile.rust build-release`
+
+Go 版本（当前稳定版本）和 Rust 版本（新实现）功能对等，可根据需要选择使用。
 
 ## 前置要求
 
