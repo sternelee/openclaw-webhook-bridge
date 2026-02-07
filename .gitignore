@@ -15,10 +15,15 @@
 /bin/
 /dist/
 openclaw-bridge
+openclaw-bridge-rust
 /bridge
 
 # Go workspace file
 go.work
+
+# Rust build artifacts
+/target/
+*.pdb
 
 # IDE
 .vscode/
@@ -40,10 +45,4 @@ config.yaml
 
 node_modules/
 .wrangler
-openclaw-bridge
 dist
-
-
-# Added by cargo
-
-/target
