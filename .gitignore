@@ -42,3 +42,8 @@ node_modules/
 .wrangler
 openclaw-bridge
 dist
+
+
+# Added by cargo
+
+/target
