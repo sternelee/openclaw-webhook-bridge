@@ -174,14 +174,14 @@ class MessageBubble extends Component<MessageBubbleProps> {
           ) : messageType === "tool_result" &&
             message.toolResult === "error" ? (
             <Text
-              className="text-[13px] leading-[1.4] whitespace-pre-wrap break-words text-[#DC2626]"
+              className="text-[13px] leading-[1.4] whitespace-pre-wrap break-all text-[#DC2626]"
               userSelect
             >
               {message.content}
             </Text>
           ) : (
             <Text
-              className="text-[14px] leading-[1.4] whitespace-pre-wrap break-words text-[#111B21]"
+              className="text-[14px] leading-[1.4] whitespace-pre-wrap break-all text-[#111B21]"
               userSelect
             >
               {message.content}

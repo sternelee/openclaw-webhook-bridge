@@ -1,0 +1,63 @@
+[package]
+name = "openclaw-bridge-rust"
+version = "0.1.0"
+edition = "2021"
+authors = ["OpenClaw Contributors"]
+description = "Bridge between WebSocket webhooks and OpenClaw AI Gateway"
+license = "MIT"
+
+[[bin]]
+name = "openclaw-bridge-rust"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# UUID generation
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# File locking
+fs2 = "0.4"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# QR code generation
+qrcode = "0.14"
+
+# Time
+chrono = "0.4"
+
+# URL parsing
+url = "2.5"
+
+# Directory utilities
+dirs = "5.0"
+
+[target.'cfg(unix)'.dependencies]
+daemonize = "0.5"
+nix = { version = "0.27", features = ["signal", "process"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.6"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

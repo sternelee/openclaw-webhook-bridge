@@ -1,0 +1,72 @@
+.PHONY: build build-all build-release clean test run fmt check clippy help
+
+BINARY_NAME=openclaw-bridge-rust
+BUILD_DIR=dist-rust
+
+help: ## Show this help message
+	@echo "Available commands for Rust implementation:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
+
+build: ## Build for current platform (debug)
+	@echo "Building $(BINARY_NAME) (debug)..."
+	cargo build
+	@echo "Done: target/debug/$(BINARY_NAME)"
+
+build-release: ## Build for current platform (release)
+	@echo "Building $(BINARY_NAME) (release)..."
+	cargo build --release
+	@echo "Done: target/release/$(BINARY_NAME)"
+
+build-all: ## Build for all platforms (requires cross)
+	@echo "Building for all platforms..."
+	./scripts/build-rust.sh
+
+build-all-release: ## Build for all platforms (release mode)
+	@echo "Building for all platforms (release)..."
+	RELEASE=1 ./scripts/build-rust.sh
+
+clean: ## Clean build artifacts
+	@echo "Cleaning..."
+	cargo clean
+	rm -rf $(BUILD_DIR)
+	@echo "Clean complete"
+
+test: ## Run tests
+	@echo "Running tests..."
+	cargo test --verbose
+
+fmt: ## Format code
+	@echo "Formatting code..."
+	cargo fmt
+	@echo "Format complete"
+
+check: ## Check code without building
+	@echo "Checking code..."
+	cargo check
+	@echo "Check complete"
+
+clippy: ## Run clippy linter
+	@echo "Running clippy..."
+	cargo clippy -- -D warnings
+	@echo "Clippy complete"
+
+lint: fmt clippy ## Run all linters
+
+run: ## Run in development mode
+	@echo "Running $(BINARY_NAME)..."
+	cargo run -- run
+
+run-release: build-release ## Run release build
+	@echo "Running $(BINARY_NAME) (release)..."
+	./target/release/$(BINARY_NAME) run
+
+install: build-release ## Install to ~/.cargo/bin
+	@echo "Installing $(BINARY_NAME)..."
+	cargo install --path .
+	@echo "Installed to: ~/.cargo/bin/$(BINARY_NAME)"
+
+doc: ## Generate documentation
+	@echo "Generating documentation..."
+	cargo doc --no-deps --open
+
+.DEFAULT_GOAL := help
