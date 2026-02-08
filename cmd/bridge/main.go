@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -72,7 +73,6 @@ func cmdStart() {
 	}
 
 	pidPath := filepath.Join(dir, "bridge.pid")
-	logPath := filepath.Join(dir, "bridge.log")
 
 	// Check if already running
 	if isRunning(pidPath) {
@@ -94,14 +94,7 @@ func cmdStart() {
 	fmt.Println()
 	printConnectionQRCode(cfg.WebhookURL, cfg.UID)
 
-	// Open log file
-	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatalf("Failed to open log file %s: %v", logPath, err)
-	}
-	defer logFile.Close()
-
-	// Use /dev/null for stdin
+	// Use /dev/null for stdin, stdout, stderr in daemon mode
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
 		log.Fatalf("Failed to open %s: %v", os.DevNull, err)
@@ -115,7 +108,7 @@ func cmdStart() {
 	}
 
 	p, err := os.StartProcess(exe, []string{exe, "run"}, &os.ProcAttr{
-		Files: []*os.File{devNull, logFile, logFile},
+		Files: []*os.File{devNull, devNull, devNull},
 		Sys:   daemonSysProcAttr(),
 	})
 	if err != nil {
@@ -131,7 +124,7 @@ func cmdStart() {
 	}
 
 	p.Release()
-	fmt.Printf("Started (PID %d), log: %s\n", pid, logPath)
+	fmt.Printf("Started (PID %d)\n", pid)
 }
 
 func cmdStop() {
@@ -171,13 +164,35 @@ func cmdStatus() {
 	}
 
 	pidPath := filepath.Join(dir, "bridge.pid")
-	if isRunning(pidPath) {
-		pid, _ := readPID(pidPath)
-		fmt.Printf("Running (PID %d)\n", pid)
-	} else {
+	pid, err := readPID(pidPath)
+	if err != nil {
 		fmt.Println("Not running")
 		os.Exit(1)
 	}
+
+	if !isProcessRunning(pid) {
+		fmt.Println("Stopped (stale PID file)")
+		os.Remove(pidPath)
+		os.Exit(1)
+	}
+
+	// Get process start time
+	startTime := getProcessStartTime(pid)
+	status := fmt.Sprintf("Running (PID %d)", pid)
+	if startTime != "" {
+		status += fmt.Sprintf("\nStarted: %s", startTime)
+	}
+	fmt.Println(status)
+}
+
+func getProcessStartTime(pid int) string {
+	// Use ps command to get process start time
+	cmd := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "lstart=")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func cmdRun() {
@@ -280,6 +295,11 @@ func cmdRun() {
 	}
 
 	log.Println("[Main] OpenClaw Bridge stopped")
+
+	// Clean up PID file if we're the daemon
+	dir, _ := config.Dir()
+	pidPath := filepath.Join(dir, "bridge.pid")
+	os.Remove(pidPath)
 }
 
 func isRunning(pidPath string) bool {
