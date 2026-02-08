@@ -4,12 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OpenClaw is an AI assistant system with four main components:
+OpenClaw is an AI assistant system with multiple implementations and components:
 
-1. **Go Bridge** (`cmd/bridge/main.go`) - Production daemon connecting webhook to OpenClaw Gateway
-2. **Cloudflare Workers Webhook** (`cloudflare-webhook/`) - Durable Object-based WebSocket service with Hono
-3. **WeChat Mini-Program** (`openclaw-mapp/`) - Taro-based React client for chatting with OpenClaw
-4. **Next.js Web App** (`openclaw-app/`) - Web client using OpenNext for Cloudflare deployment
+1. **Go Bridge** (`cmd/bridge/main.go`) - Production daemon connecting webhook to OpenClaw Gateway (mature, production-ready)
+2. **Rust Bridge** (`src/main.rs`) - Alternative implementation with better performance and memory safety (feature-complete, ~73% smaller binary)
+3. **Cloudflare Workers Webhook** (`cloudflare-webhook/`) - Durable Object-based WebSocket service with Hono
+4. **WeChat Mini-Program** (`openclaw-mapp/`) - Taro-based React client for chatting with OpenClaw
+5. **Next.js Web App** (`openclaw-app/`) - Web client using OpenNext for Cloudflare deployment
+
+Both Go and Rust implementations are production-ready and use identical configuration files. Choose Rust for better performance/smaller footprint, or Go for ecosystem familiarity.
 
 ### System Architecture
 
@@ -41,6 +44,20 @@ OpenClaw is an AI assistant system with four main components:
                                       │ (localhost:18789)│
                                       └──────────────────┘
 ```
+
+## Bridge Implementation Choice
+
+This project offers **two fully-functional bridge implementations**:
+
+| Aspect | Go Version | Rust Version |
+|--------|-----------|--------------|
+| Binary Size | ~10MB | ~2.7MB (73% smaller) |
+| Startup Memory | 8-10MB | 2-3MB |
+| Maturity | Production-proven | Feature-complete, newer |
+| Build | `make build` | `make -f Makefile.rust build-release` |
+| Config | Same `~/.openclaw/*.json` | Same `~/.openclaw/*.json` |
+
+Both use identical configuration - switch anytime without changes.
 
 ## Component 1: Go Bridge
 
@@ -77,6 +94,64 @@ The bridge consists of five main components:
 
 The UID is mandatory for routing - auto-generated UUID v4 if not provided.
 
+### Rust Bridge
+
+The Rust implementation (`src/`) provides the same functionality with performance benefits:
+
+- **Architecture**: Async I/O with Tokio runtime, channel-based message passing
+- **Modules**: `src/{bridge,commands,config,openclaw,sessions,webhook}/mod.rs`
+- **Binary**: `openclaw-bridge-rust` (2.7MB vs Go's 10MB)
+
+#### Rust Build Commands
+
+```bash
+# Debug build
+cargo build
+# or
+make -f Makefile.rust build
+
+# Release build (optimized, stripped)
+cargo build --release
+# or
+make -f Makefile.rust build-release
+
+# Run in foreground
+cargo run -- run
+# or
+make -f Makefile.rust run
+
+# Cross-platform builds (requires cross)
+make -f Makefile.rust build-all-release
+
+# Linting
+make -f Makefile.rust fmt      # cargo fmt
+make -f Makefile.rust clippy   # cargo clippy
+make -f Makefile.rust lint     # fmt + clippy
+
+# Testing
+make -f Makefile.rust test     # cargo test
+
+# Single test
+cargo test test_session_key
+
+# Run tests in package
+cd src/sessions && cargo test
+
+# Show test output
+cargo test -- --nocapture
+```
+
+#### Rust Logging
+
+Set log level via `RUST_LOG` environment variable:
+```bash
+RUST_LOG=info cargo run -- run    # Default
+RUST_LOG=debug cargo run -- run   # Verbose
+RUST_LOG=warn cargo run -- run    # Quiet
+```
+
+See `RUST_README.md` and `GO_VS_RUST.md` for detailed comparison.
+
 ### Go Bridge Build Commands
 
 ```bash
@@ -102,7 +177,17 @@ go run ./cmd/bridge/
 ./openclaw-bridge restart
 
 # Tests
-make test
+make test                 # Run all tests
+go test -v ./...         # Verbose output
+
+# Single package test
+go test -v ./internal/webhook/
+
+# Specific test
+go test -v -run TestConnectionLoop ./internal/webhook/
+
+# With coverage
+go test -cover ./...
 
 # Code quality
 make fmt      # go fmt ./...
@@ -163,6 +248,8 @@ Edit `wrangler.toml` to configure:
 ## Component 3: WeChat Mini-Program
 
 The mini-program is built with Taro (React-based framework) for WeChat, providing a chat interface to OpenClaw.
+
+**Important**: Use `pnpm` NOT npm for this package due to Tailwind CSS patch scripts.
 
 ### Mini-Program Architecture
 
@@ -361,6 +448,8 @@ This design allows multiple bridges and multiple clients to connect to the same 
 
 - **Session reset triggers**: Messages matching `/new` or `/reset` trigger session reset (fresh conversation context). The session preserves its delivery context but starts with a new `sessionId`.
 
+- **Command handling**: The bridge supports slash commands (`/help`, `/commands`, `/skill`, `/approve`) that are intercepted and handled locally or forwarded to OpenClaw Gateway. Commands are detected by leading `/` and parsed by `internal/commands/handler.go`.
+
 - **Control message filtering**: The bridge ignores webhook control payloads with `type` values like `connected`, `error`, or `event`. These are internal WebSocket protocol messages, not user content.
 
 - **Mandatory UID routing**: The bridge requires a UID (unique identifier) to append as a query parameter when connecting to the webhook server (`?uid=...`). This allows webhook servers to distinguish between multiple bridge instances. If not provided in config, a UUID v4 is auto-generated and saved.
@@ -370,17 +459,26 @@ This design allows multiple bridges and multiple clients to connect to the same 
 ## File Structure Reference
 
 ```
-openclaw-run/
+openclaw-webhook-bridge/
 ├── cmd/bridge/              # Go bridge entry point
 │   ├── main.go              # CLI and daemon management
 │   ├── daemon_unix.go       # Unix daemon implementation
 │   └── daemon_windows.go    # Windows daemon implementation
-├── internal/
+├── internal/                # Go internal packages
 │   ├── bridge/              # Core routing logic
+│   ├── commands/            # Slash command handling
 │   ├── config/              # Configuration loader
 │   ├── openclaw/            # OpenClaw Gateway client
 │   ├── sessions/            # Session persistence
 │   └── webhook/             # Webhook server client
+├── src/                     # Rust implementation
+│   ├── main.rs              # CLI entry point
+│   ├── bridge/              # Core routing logic
+│   ├── commands/            # Command handling
+│   ├── config/              # Configuration management
+│   ├── openclaw/            # OpenClaw Gateway client
+│   ├── sessions/            # Session management
+│   └── webhook/             # Webhook WebSocket client
 ├── cloudflare-webhook/      # Cloudflare Workers webhook (Hono + Durable Objects)
 │   ├── src/
 │   │   ├── index.ts         # Hono router with test page
@@ -409,9 +507,15 @@ openclaw-run/
 │   ├── next.config.ts       # Next.js configuration
 │   └── package.json
 ├── Makefile                 # Go build commands
+├── Makefile.rust            # Rust build commands
+├── Cargo.toml               # Rust project manifest
 ├── go.mod, go.sum           # Go dependencies
 ├── CLAUDE.md                # This file - AI agent guidance
 ├── AGENTS.md                # Additional AI agent guidelines
+├── COMMANDS.md              # Slash commands feature documentation
+├── GO_VS_RUST.md            # Go vs Rust comparison
+├── IMPLEMENTATION_SUMMARY.md # Rust implementation summary
+├── RUST_README.md           # Rust implementation guide
 ├── SESSION_CONTROL.md       # Session control protocol documentation
 └── README.md                # User-facing documentation
 ```
@@ -424,6 +528,19 @@ The Go bridge uses platform-specific files for daemonization:
 - `cmd/bridge/daemon_windows.go` - Windows daemon (no special flags needed)
 
 When adding daemon-related changes, ensure both platforms are handled.
+
+**Note**: The Rust implementation does not yet have full daemon mode implemented (marked as future work in `RUST_README.md`).
+
+## Slash Commands
+
+The bridge supports local slash commands that are intercepted before forwarding to OpenClaw:
+
+- `/help` - Show available commands
+- `/commands` - List all OpenClaw Gateway commands (fetched via `system.listCommands`)
+- `/skill [name]` - List or run skills
+- `/approve [id] [yes|no]` - Approve/deny pending requests
+
+Commands are detected by the leading `/` and handled by `internal/commands/handler.go` (Go) or `src/commands/mod.rs` (Rust). See `COMMANDS.md` for full protocol details.
 
 ## WebSocket Protocol Details
 
