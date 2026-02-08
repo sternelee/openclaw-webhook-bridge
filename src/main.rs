@@ -131,7 +131,7 @@ fn cmd_stop() -> Result<()> {
 }
 
 fn cmd_status() -> Result<()> {
-    let status = daemon::daemon_status();
+    let status = daemon::daemon_status_detailed();
     println!("{}", status);
     Ok(())
 }

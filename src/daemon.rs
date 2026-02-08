@@ -8,79 +8,15 @@ use anyhow::{Context, Result};
 
 use crate::config::config_dir;
 
-/// Maximum log file size before rotation (10 MB)
-const MAX_LOG_SIZE: u64 = 10 * 1024 * 1024;
-
-/// Number of archived log files to keep
-const MAX_ARCHIVED_LOGS: usize = 5;
-
 /// Path to the PID file
 pub fn pid_path() -> Result<std::path::PathBuf> {
     Ok(config_dir()?.join("bridge.pid"))
 }
 
-/// Path to the log file
+/// Path to the log file (optional, only created in run mode)
+#[allow(dead_code)]
 pub fn log_path() -> Result<std::path::PathBuf> {
     Ok(config_dir()?.join("bridge.log"))
-}
-
-/// Rotate log files if they exceed the maximum size
-pub fn rotate_logs_if_needed() -> Result<()> {
-    let log_path = log_path()?;
-
-    // Check if log file exists and its size
-    if let Ok(metadata) = fs::metadata(&log_path) {
-        if metadata.len() > MAX_LOG_SIZE {
-            // Rotate existing logs
-            rotate_archived_logs()?;
-            // Archive current log
-            let archive_path = log_path.with_extension("log.1");
-            fs::rename(&log_path, &archive_path)
-                .with_context(|| format!("Failed to rotate log file: {}", log_path.display()))?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Rotate archived log files (bridge.log.1 -> bridge.log.2, etc.)
-fn rotate_archived_logs() -> Result<()> {
-    let config_dir = config_dir()?;
-
-    // Delete the oldest log if it exists
-    let oldest_log = config_dir.join(format!("bridge.log.{}", MAX_ARCHIVED_LOGS));
-    let _ = fs::remove_file(&oldest_log);
-
-    // Rotate existing archived logs
-    for i in (1..MAX_ARCHIVED_LOGS).rev() {
-        let current = config_dir.join(format!("bridge.log.{}", i));
-        let next = config_dir.join(format!("bridge.log.{}", i + 1));
-
-        if current.exists() {
-            fs::rename(&current, &next)
-                .with_context(|| format!("Failed to rotate archived log: {}", current.display()))?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Clean up old archived logs (keep only MAX_ARCHIVED_LOGS)
-pub fn cleanup_old_logs() -> Result<()> {
-    let config_dir = config_dir()?;
-
-    // Remove archived logs beyond the limit
-    for i in (MAX_ARCHIVED_LOGS + 1)..100 {
-        let log_file = config_dir.join(format!("bridge.log.{}", i));
-        if log_file.exists() {
-            fs::remove_file(&log_file)
-                .with_context(|| format!("Failed to remove old log: {}", log_file.display()))?;
-        } else {
-            break;
-        }
-    }
-
-    Ok(())
 }
 
 /// Read PID from file
@@ -93,6 +29,51 @@ pub fn read_pid() -> Result<u32> {
         .parse()
         .with_context(|| format!("Invalid PID in file: {}", content))?;
     Ok(pid)
+}
+
+/// Get process start time (Unix)
+#[cfg(unix)]
+pub fn get_process_start_time(pid: u32) -> Option<String> {
+    use std::process::Command;
+
+    // Get process start time using ps
+    let output = Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "lstart="])
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        None
+    }
+}
+
+/// Get process start time (Windows stub)
+#[cfg(windows)]
+pub fn get_process_start_time(_pid: u32) -> Option<String> {
+    None
+}
+
+/// Get last N lines from log file
+#[allow(dead_code)]
+pub fn get_last_log_lines(n: usize) -> Result<Vec<String>> {
+    let log_path = log_path()?;
+    if !log_path.exists() {
+        return Ok(vec!["No log file".to_string()]);
+    }
+
+    let content = fs::read_to_string(&log_path)
+        .with_context(|| format!("Failed to read log file: {}", log_path.display()))?;
+
+    let lines: Vec<String> = content
+        .lines()
+        .rev()
+        .take(n)
+        .map(|s| s.to_string())
+        .collect();
+
+    Ok(lines.into_iter().rev().collect())
 }
 
 /// Check if process is running (Unix)
@@ -166,28 +147,16 @@ pub fn start_daemon() -> Result<()> {
         anyhow::bail!("Daemon is already running");
     }
 
-    // Rotate logs if needed before starting
-    rotate_logs_if_needed()?;
-    cleanup_old_logs()?;
-
-    // Open log file
-    let log_path = log_path()?;
-    let log_file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .with_context(|| format!("Failed to open log file: {}", log_path.display()))?;
-
     // Get current executable
     let exe = std::env::current_exe()
         .context("Failed to get current executable path")?;
 
-    // Spawn daemon process
+    // Spawn daemon process without log file (redirect to /dev/null)
     let child = Command::new(&exe)
         .arg("daemon-run")
         .stdin(Stdio::null())
-        .stdout(log_file.try_clone()?)
-        .stderr(log_file)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .process_group(0)
         .spawn()
         .context("Failed to spawn daemon process")?;
@@ -199,7 +168,7 @@ pub fn start_daemon() -> Result<()> {
     fs::write(&pid_path, pid.to_string())
         .with_context(|| format!("Failed to write PID file: {}", pid_path.display()))?;
 
-    println!("Started (PID {}), log: {}", pid, log_path.display());
+    println!("Started (PID {})", pid);
 
     Ok(())
 }
@@ -210,11 +179,15 @@ pub fn start_daemon() -> Result<()> {
     anyhow::bail!("Daemon mode not yet implemented on Windows");
 }
 
-/// Get daemon status
-pub fn daemon_status() -> String {
+/// Get detailed daemon status
+pub fn daemon_status_detailed() -> String {
     if let Ok(pid) = read_pid() {
         if is_process_running(pid) {
-            format!("Running (PID {})", pid)
+            let mut status = format!("Running (PID {})", pid);
+            if let Some(start_time) = get_process_start_time(pid) {
+                status.push_str(&format!("\nStarted: {}", start_time));
+            }
+            status
         } else {
             "Stopped (stale PID file)".to_string()
         }
