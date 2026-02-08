@@ -66,10 +66,6 @@ impl Client {
         self.on_event = Some(Arc::new(callback));
     }
 
-    pub fn agent_id(&self) -> &str {
-        &self.agent_id
-    }
-
     /// Connect and start the connection loop
     pub async fn connect(&mut self) -> Result<()> {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
@@ -361,10 +357,5 @@ impl Client {
         self.connected.store(false, Ordering::SeqCst);
         info!("[OpenClaw] Connection closed");
         Ok(())
-    }
-
-    /// Check if connected
-    pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::SeqCst)
     }
 }

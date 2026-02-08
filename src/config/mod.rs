@@ -127,28 +127,6 @@ pub fn generate_uid() -> String {
     Uuid::new_v4().to_string()
 }
 
-/// Get a display string for the UID
-pub fn get_display_uid(cfg: &Config) -> String {
-    format!("Bridge UID: {}", cfg.uid)
-}
-
-/// Save bridge config to file
-pub fn save_bridge_config(webhook_url: &str, uid: &str, agent_id: Option<&str>) -> Result<()> {
-    let dir = config_dir()?;
-    let path = dir.join("bridge.json");
-
-    let cfg = BridgeJSON {
-        webhook_url: webhook_url.to_string(),
-        agent_id: agent_id.map(|s| s.to_string()),
-        uid: Some(uid.to_string()),
-    };
-
-    let data = serde_json::to_string_pretty(&cfg)?;
-    fs::write(&path, data)?;
-
-    Ok(())
-}
-
 /// Prompt user for input with optional default value
 fn prompt_input(prompt: &str, default: &str) -> Result<String> {
     let mut input = String::new();
@@ -332,7 +310,7 @@ pub fn print_connection_qrcode(webhook_url: &str, uid: &str) {
 
     // Render QR code using Unicode block elements
     let size = qr.width();
-    const border: usize = 1;
+    const BORDER: usize = 1;
 
     // Unicode block elements for 2x1 pixel rendering
     const UPPER: char = '\u{2580}'; // ▀
@@ -340,17 +318,17 @@ pub fn print_connection_qrcode(webhook_url: &str, uid: &str) {
     const FULL: char = '\u{2588}'; // █
     const EMPTY: char = ' ';
 
-    for y in (0..size + 2 * border).step_by(2) {
+    for y in (0..size + 2 * BORDER).step_by(2) {
         let mut line = String::new();
-        for x in 0..size + 2 * border {
-            let top = if y >= border && y < size + border && x >= border && x < size + border {
-                matches!(qr[(x - border, y - border)], Color::Dark)
+        for x in 0..size + 2 * BORDER {
+            let top = if y >= BORDER && y < size + BORDER && x >= BORDER && x < size + BORDER {
+                matches!(qr[(x - BORDER, y - BORDER)], Color::Dark)
             } else {
                 false
             };
             let bottom =
-                if y + 1 >= border && y + 1 < size + border && x >= border && x < size + border {
-                    matches!(qr[(x - border, y + 1 - border)], Color::Dark)
+                if y + 1 >= BORDER && y + 1 < size + BORDER && x >= BORDER && x < size + BORDER {
+                    matches!(qr[(x - BORDER, y + 1 - BORDER)], Color::Dark)
                 } else {
                     false
                 };

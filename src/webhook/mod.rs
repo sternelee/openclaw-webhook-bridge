@@ -254,9 +254,4 @@ impl Client {
         info!("[Webhook] Connection closed");
         Ok(())
     }
-
-    /// Check if connected
-    pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::SeqCst)
-    }
 }

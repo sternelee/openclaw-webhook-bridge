@@ -80,6 +80,7 @@ pub fn normalize_session_key(key: &str) -> String {
 
 /// Webhook message structure for session key resolution
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct WebhookMessage {
     pub id: String,
     pub content: String,
@@ -133,6 +134,7 @@ pub fn build_webhook_session_key(params: &WebhookSessionParams) -> Option<String
 /// Session control message types
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[allow(dead_code)]
 pub enum ControlMessageType {
     SessionGet,
     SessionList,
@@ -142,6 +144,7 @@ pub enum ControlMessageType {
 
 /// Session control message
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SessionControlMessage {
     #[serde(rename = "type")]
     pub msg_type: ControlMessageType,
@@ -153,6 +156,7 @@ pub struct SessionControlMessage {
 
 /// Session info response
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SessionInfoResponse {
     pub key: String,
     #[serde(rename = "sessionId")]
@@ -169,6 +173,7 @@ pub struct SessionInfoResponse {
 
 /// Session list response
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SessionListResponse {
     pub sessions: Vec<SessionInfoResponse>,
     pub count: usize,
@@ -187,21 +192,4 @@ pub fn is_session_control_message(data: &[u8]) -> bool {
         }
     }
     false
-}
-
-/// Parse session control message
-pub fn parse_session_control_message(data: &[u8]) -> anyhow::Result<SessionControlMessage> {
-    Ok(serde_json::from_slice(data)?)
-}
-
-/// Build session control response
-pub fn build_session_control_response(
-    msg_type: &ControlMessageType,
-    data: &impl Serialize,
-) -> anyhow::Result<Vec<u8>> {
-    let mut response = serde_json::to_value(data)?;
-    if let Some(obj) = response.as_object_mut() {
-        obj.insert("type".to_string(), serde_json::json!(msg_type));
-    }
-    Ok(serde_json::to_vec(&response)?)
 }

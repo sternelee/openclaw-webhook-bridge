@@ -16,7 +16,6 @@ use super::types::{
 pub struct StoreConfig {
     pub store_path: PathBuf,
     pub cache_ttl: Duration,
-    pub lock_timeout: Duration,
 }
 
 impl StoreConfig {
@@ -24,7 +23,6 @@ impl StoreConfig {
         Self {
             store_path,
             cache_ttl: Duration::from_secs(45),
-            lock_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -131,6 +129,7 @@ impl Store {
     }
 
     /// Get a session entry
+    #[allow(dead_code)]
     pub fn get_entry(&self, key: &str) -> Result<Option<SessionEntry>> {
         let store = self.load()?;
         Ok(store.get(key).cloned())
@@ -191,6 +190,7 @@ impl Store {
     }
 
     /// Update last route for a session
+    #[allow(dead_code)]
     pub fn update_last_route(
         &self,
         session_key: &str,
