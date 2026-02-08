@@ -279,6 +279,16 @@ fn save_bridge_config_partially(
     Ok(())
 }
 
+/// Save webhook URL to config
+pub fn save_webhook_url(url: &str) -> Result<()> {
+    save_bridge_config_partially(Some(url), None, None)
+}
+
+/// Save UID to config
+pub fn save_uid(uid: &str) -> Result<()> {
+    save_bridge_config_partially(None, Some(uid), None)
+}
+
 /// Print connection QR code to terminal
 pub fn print_connection_qrcode(webhook_url: &str, uid: &str) {
     use qrcode::{Color, QrCode};

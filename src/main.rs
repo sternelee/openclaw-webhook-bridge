@@ -1,6 +1,7 @@
 mod bridge;
 mod commands;
 mod config;
+mod daemon;
 mod openclaw;
 mod sessions;
 mod webhook;
@@ -48,12 +49,21 @@ enum Commands {
         #[arg(long)]
         uid: Option<String>,
     },
+    /// Internal command: run as daemon process
+    DaemonRun,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // Parse command line args first
+    let args: Vec<String> = std::env::args().collect();
 
+    // Check for daemon-run command directly (for re-exec)
+    if args.len() > 1 && args[1] == "daemon-run" {
+        return run_daemon().await;
+    }
+
+    // For other commands, use clap
     let cli = Cli::parse();
 
     let command = cli.command.unwrap_or(Commands::Run {
@@ -63,53 +73,117 @@ async fn main() -> Result<()> {
 
     match command {
         Commands::Start { webhook_url, uid } => {
-            println!("Starting bridge...");
-
-            // Handle interactive input for webhook_url and uid if not provided
-            let webhook_url = load_or_prompt_webhook_url(webhook_url)?;
-            let uid = load_or_prompt_uid(uid)?;
-
-            // Show UID and QR code
-            display_uid_and_qrcode(&uid, &webhook_url);
-
-            println!("Note: Daemon mode not yet fully implemented in Rust version");
-            println!("Running in foreground instead...");
-            run_bridge().await
+            cmd_start(webhook_url, uid)
         }
         Commands::Stop => {
-            println!("Stopping bridge...");
-            println!("Note: Daemon mode not yet implemented in Rust version");
-            Ok(())
+            cmd_stop()
         }
         Commands::Status => {
-            println!("Checking bridge status...");
-            println!("Note: Daemon mode not yet implemented in Rust version");
-            Ok(())
+            cmd_status()
         }
         Commands::Restart { webhook_url, uid } => {
-            println!("Restarting bridge...");
-
-            // Handle interactive input if not provided
-            let webhook_url = load_or_prompt_webhook_url(webhook_url)?;
-            let uid = load_or_prompt_uid(uid)?;
-
-            // Show UID and QR code
-            display_uid_and_qrcode(&uid, &webhook_url);
-
-            println!("Note: Daemon mode not yet implemented in Rust version");
-            Ok(())
+            cmd_restart(webhook_url, uid)
         }
         Commands::Run { webhook_url, uid } => {
-            // Handle interactive input if not provided
-            let webhook_url = load_or_prompt_webhook_url(webhook_url)?;
-            let uid = load_or_prompt_uid(uid)?;
-
-            // Show UID and QR code
-            display_uid_and_qrcode(&uid, &webhook_url);
-
-            run_bridge().await
+            cmd_run(webhook_url, uid).await
+        }
+        Commands::DaemonRun => {
+            run_daemon().await
         }
     }
+}
+
+fn cmd_start(webhook_url: Option<String>, uid: Option<String>) -> Result<()> {
+    // Check if already running
+    if daemon::is_running() {
+        eprintln!("Already running");
+        std::process::exit(1);
+    }
+
+    // Handle interactive input for webhook_url and uid if not provided
+    let webhook_url = load_or_prompt_webhook_url(webhook_url)?;
+    let uid = load_or_prompt_uid(uid)?;
+
+    // Save config if prompted
+    config::save_webhook_url(&webhook_url)?;
+    config::save_uid(&uid)?;
+
+    // Show UID and QR code
+    display_uid_and_qrcode(&uid, &webhook_url);
+
+    // Start daemon
+    daemon::start_daemon()?;
+
+    Ok(())
+}
+
+fn cmd_stop() -> Result<()> {
+    match daemon::stop_daemon() {
+        Ok(()) => {
+            println!("Stopped");
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_status() -> Result<()> {
+    let status = daemon::daemon_status();
+    println!("{}", status);
+    Ok(())
+}
+
+fn cmd_restart(webhook_url: Option<String>, uid: Option<String>) -> Result<()> {
+    // Stop if running
+    if daemon::is_running() {
+        println!("Stopping running daemon...");
+        let _ = daemon::stop_daemon();
+
+        // Wait for process to stop
+        if let Ok(pid) = daemon::read_pid() {
+            for _ in 0..10 {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                if !daemon::is_process_running(pid) {
+                    break;
+                }
+            }
+        }
+    }
+
+    // Clean up stale PID file
+    let _ = std::fs::remove_file(daemon::pid_path()?);
+
+    // Start new daemon
+    cmd_start(webhook_url, uid)
+}
+
+async fn cmd_run(webhook_url: Option<String>, uid: Option<String>) -> Result<()> {
+    // Handle interactive input if not provided
+    let webhook_url = load_or_prompt_webhook_url(webhook_url)?;
+    let uid = load_or_prompt_uid(uid)?;
+
+    // Save config if prompted
+    config::save_webhook_url(&webhook_url)?;
+    config::save_uid(&uid)?;
+
+    // Show UID and QR code
+    display_uid_and_qrcode(&uid, &webhook_url);
+
+    // Run bridge in foreground
+    run_bridge().await
+}
+
+/// Run bridge as daemon process (after re-exec)
+async fn run_daemon() -> Result<()> {
+    // Initialize logger (stdout/stderr are already redirected to log file by daemon.rs)
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format_timestamp_millis()
+        .init();
+
+    run_bridge().await
 }
 
 fn display_uid_and_qrcode(uid: &str, webhook_url: &str) {
@@ -222,5 +296,11 @@ async fn run_bridge() -> Result<()> {
     }
 
     info!("[Main] OpenClaw Bridge stopped");
+
+    // Clean up PID file if we're the daemon
+    if let Ok(pid_path) = daemon::pid_path() {
+        let _ = std::fs::remove_file(pid_path);
+    }
+
     Ok(())
 }
