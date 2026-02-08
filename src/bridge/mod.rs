@@ -412,7 +412,8 @@ impl Bridge {
             if trimmed == trigger {
                 return String::new();
             }
-            if trimmed.starts_with(trigger) && trimmed.len() > trigger.len()
+            if trimmed.starts_with(trigger)
+                && trimmed.len() > trigger.len()
                 && trimmed.chars().nth(trigger.len()) == Some(' ')
             {
                 return trimmed[trigger.len() + 1..].trim().to_string();

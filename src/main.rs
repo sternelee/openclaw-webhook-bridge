@@ -72,24 +72,12 @@ async fn main() -> Result<()> {
     });
 
     match command {
-        Commands::Start { webhook_url, uid } => {
-            cmd_start(webhook_url, uid)
-        }
-        Commands::Stop => {
-            cmd_stop()
-        }
-        Commands::Status => {
-            cmd_status()
-        }
-        Commands::Restart { webhook_url, uid } => {
-            cmd_restart(webhook_url, uid)
-        }
-        Commands::Run { webhook_url, uid } => {
-            cmd_run(webhook_url, uid).await
-        }
-        Commands::DaemonRun => {
-            run_daemon().await
-        }
+        Commands::Start { webhook_url, uid } => cmd_start(webhook_url, uid),
+        Commands::Stop => cmd_stop(),
+        Commands::Status => cmd_status(),
+        Commands::Restart { webhook_url, uid } => cmd_restart(webhook_url, uid),
+        Commands::Run { webhook_url, uid } => cmd_run(webhook_url, uid).await,
+        Commands::DaemonRun => run_daemon().await,
     }
 }
 

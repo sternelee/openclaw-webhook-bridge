@@ -1,7 +1,8 @@
 // Daemon process management for Unix-like systems
+use std::fs;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
-use std::fs;
+#[cfg(unix)]
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
@@ -148,8 +149,7 @@ pub fn start_daemon() -> Result<()> {
     }
 
     // Get current executable
-    let exe = std::env::current_exe()
-        .context("Failed to get current executable path")?;
+    let exe = std::env::current_exe().context("Failed to get current executable path")?;
 
     // Spawn daemon process without log file (redirect to /dev/null)
     let child = Command::new(&exe)
