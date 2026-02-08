@@ -40,7 +40,10 @@ impl CommandHandler {
         match trimmed {
             "/help" => Ok(self.handle_help()),
             "/version" => Ok(self.handle_version()),
-            _ => Ok(format!("Unknown command: {}. Type /help for available commands.", trimmed)),
+            _ => Ok(format!(
+                "Unknown command: {}. Type /help for available commands.",
+                trimmed
+            )),
         }
     }
 
@@ -59,7 +62,8 @@ impl CommandHandler {
 /new - Start a new conversation (forwarded to gateway)
 /reset - Reset current conversation (forwarded to gateway)
 
-Most other commands are forwarded to the OpenClaw Gateway."#.to_string()
+Most other commands are forwarded to the OpenClaw Gateway."#
+            .to_string()
     }
 
     /// Handle version command

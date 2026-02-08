@@ -47,7 +47,7 @@ impl Client {
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
         let (send_tx, send_rx) = mpsc::channel(100);
-        
+
         self.shutdown_tx = Some(shutdown_tx);
         self.send_tx = Some(send_tx);
 
@@ -59,7 +59,16 @@ impl Client {
 
         // Spawn connection loop
         tokio::spawn(async move {
-            Self::connection_loop(url, uid, handler, connected, conn_notify, shutdown_rx, send_rx).await;
+            Self::connection_loop(
+                url,
+                uid,
+                handler,
+                connected,
+                conn_notify,
+                shutdown_rx,
+                send_rx,
+            )
+            .await;
         });
 
         // Wait for initial connection
@@ -140,9 +149,7 @@ impl Client {
 
         info!("[Webhook] Connecting to {} (UID: {})", ws_url, uid);
 
-        let (ws_stream, _) = connect_async(&ws_url)
-            .await
-            .context("Failed to connect")?;
+        let (ws_stream, _) = connect_async(&ws_url).await.context("Failed to connect")?;
 
         let (mut write, mut read) = ws_stream.split();
 
@@ -187,9 +194,22 @@ impl Client {
                 }
                 // Handle outgoing messages
                 Some(data) = send_rx.recv() => {
-                    if let Err(e) = write.send(Message::Binary(data)).await {
-                        error!("[Webhook] Failed to send message: {}", e);
-                        break;
+                    // Convert Vec<u8> to String for Text message (JSON should be valid UTF-8)
+                    match String::from_utf8(data) {
+                        Ok(text) => {
+                            if let Err(e) = write.send(Message::Text(text)).await {
+                                error!("[Webhook] Failed to send message: {}", e);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            error!("[Webhook] Failed to convert message to UTF-8: {}", e);
+                            // Still send as binary fallback
+                            if let Err(e) = write.send(Message::Binary(e.into_bytes())).await {
+                                error!("[Webhook] Failed to send message: {}", e);
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -225,11 +245,11 @@ impl Client {
     /// Close the connection
     pub async fn close(&mut self) -> Result<()> {
         info!("[Webhook] Closing connection...");
-        
+
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(()).await;
         }
-        
+
         self.connected.store(false, Ordering::SeqCst);
         info!("[Webhook] Connection closed");
         Ok(())

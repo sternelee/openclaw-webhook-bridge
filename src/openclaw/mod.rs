@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
-use log::{error, info, warn};
-use serde::{Deserialize, Serialize};
+use log::{error, info};
+use serde::Serialize;
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -236,9 +236,22 @@ impl Client {
                 }
                 // Handle outgoing messages
                 Some(data) = send_rx.recv() => {
-                    if let Err(e) = write.send(Message::Binary(data)).await {
-                        error!("[OpenClaw] Failed to send message: {}", e);
-                        break;
+                    // Convert Vec<u8> to String for Text message (JSON should be valid UTF-8)
+                    match String::from_utf8(data) {
+                        Ok(text) => {
+                            if let Err(e) = write.send(Message::Text(text)).await {
+                                error!("[OpenClaw] Failed to send message: {}", e);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            error!("[OpenClaw] Failed to convert message to UTF-8: {}", e);
+                            // Still send as binary fallback
+                            if let Err(e) = write.send(Message::Binary(e.into_bytes())).await {
+                                error!("[OpenClaw] Failed to send message: {}", e);
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -253,11 +266,13 @@ impl Client {
     /// Send the initial connect handshake
     async fn send_connect_request(
         write: &mut futures_util::stream::SplitSink<
-            tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+            tokio_tungstenite::WebSocketStream<
+                tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+            >,
             Message,
         >,
         token: &str,
-        agent_id: &str,
+        _agent_id: &str,
     ) -> Result<()> {
         let connect_req = json!({
             "type": "req",

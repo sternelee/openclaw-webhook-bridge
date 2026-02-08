@@ -1,13 +1,15 @@
 use anyhow::Result;
 use fs2::FileExt;
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use super::types::{current_timestamp, generate_session_id, DeliveryContext, SessionEntry, SessionStore};
+use super::types::{
+    current_timestamp, generate_session_id, DeliveryContext, SessionEntry, SessionStore,
+};
 
 /// Store configuration
 #[derive(Debug, Clone)]

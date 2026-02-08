@@ -1,6 +1,6 @@
 use anyhow::Result;
 use log::{info, warn};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -40,10 +40,10 @@ pub struct Bridge {
     webhook_client: Arc<RwLock<Option<webhook::Client>>>,
     openclaw_client: Arc<RwLock<Option<openclaw::Client>>>,
     command_handler: CommandHandler,
-    agent_id: String,
-    uid: String,
-    session_store: Option<Arc<SessionStore>>,
-    session_scope: SessionScope,
+    agent_id: Arc<RwLock<String>>,
+    uid: Arc<RwLock<String>>,
+    session_store: Arc<RwLock<Option<Arc<SessionStore>>>>,
+    session_scope: Arc<RwLock<SessionScope>>,
 }
 
 impl Bridge {
@@ -52,26 +52,29 @@ impl Bridge {
             webhook_client: Arc::new(RwLock::new(None)),
             openclaw_client: Arc::new(RwLock::new(None)),
             command_handler: CommandHandler::new(),
-            agent_id,
-            uid: String::new(),
-            session_store: None,
-            session_scope: SessionScope::PerSender,
+            agent_id: Arc::new(RwLock::new(agent_id)),
+            uid: Arc::new(RwLock::new(String::new())),
+            session_store: Arc::new(RwLock::new(None)),
+            session_scope: Arc::new(RwLock::new(SessionScope::PerSender)),
         }
     }
 
-    pub fn set_uid(&mut self, uid: String) {
+    pub async fn set_uid(&self, uid: String) {
         info!("[Bridge] Bridge UID set to: {}", uid);
-        self.uid = uid;
+        let mut u = self.uid.write().await;
+        *u = uid;
     }
 
-    pub fn set_session_store(&mut self, store: Arc<SessionStore>) {
+    pub async fn set_session_store(&self, store: Arc<SessionStore>) {
         info!("[Bridge] Session store configured");
-        self.session_store = Some(store);
+        let mut s = self.session_store.write().await;
+        *s = Some(store);
     }
 
-    pub fn set_session_scope(&mut self, scope: SessionScope) {
+    pub async fn set_session_scope(&self, scope: SessionScope) {
         info!("[Bridge] Session scope set to: {}", scope);
-        self.session_scope = scope;
+        let mut s = self.session_scope.write().await;
+        *s = scope;
     }
 
     pub async fn set_webhook_client(&self, client: webhook::Client) {
@@ -82,6 +85,18 @@ impl Bridge {
     pub async fn set_openclaw_client(&self, client: openclaw::Client) {
         let mut o = self.openclaw_client.write().await;
         *o = Some(client);
+    }
+
+    /// Take the OpenClaw client from the bridge (for cleanup)
+    pub async fn take_openclaw_client(&self) -> Option<openclaw::Client> {
+        let mut client = self.openclaw_client.write().await;
+        client.take()
+    }
+
+    /// Take the webhook client from the bridge (for cleanup)
+    pub async fn take_webhook_client(&self) -> Option<webhook::Client> {
+        let mut client = self.webhook_client.write().await;
+        client.take()
     }
 
     /// Handle message from webhook
@@ -121,9 +136,17 @@ impl Bridge {
             return self.handle_command(&msg).await;
         }
 
+        // Get agent_id and uid from Arc<RwLock>
+        let agent_id = self.agent_id.read().await;
+        let uid = self.uid.read().await;
+        let session_scope = self.session_scope.read().await;
+
         // Resolve session key
-        let session_key = self.resolve_session_key(&msg);
-        info!("[Bridge] Resolved session key: {} (scope: {})", session_key, self.session_scope);
+        let session_key = self.resolve_session_key(&msg, &agent_id, &session_scope);
+        info!(
+            "[Bridge] Resolved session key: {} (scope: {})",
+            session_key, *session_scope
+        );
 
         // Check for reset triggers
         let is_reset = self.is_reset_trigger(&msg.content);
@@ -135,12 +158,13 @@ impl Bridge {
         };
 
         // Record session metadata
-        if let Some(ref store) = self.session_store {
+        let store = self.session_store.read().await;
+        if let Some(ref store) = *store {
             let delivery_to = msg.peer_id.clone().unwrap_or_else(|| msg.id.clone());
             let delivery_ctx = DeliveryContext {
                 channel: Some("webhook".to_string()),
                 to: Some(delivery_to),
-                account_id: Some(self.uid.clone()),
+                account_id: Some(uid.clone()),
                 thread_id: self.resolve_delivery_thread_id(&msg),
             };
 
@@ -171,6 +195,7 @@ impl Bridge {
                 warn!("[Bridge] Failed to record session metadata: {}", e);
             }
         }
+        drop(store); // Release lock before sending request
 
         // Forward to OpenClaw
         let openclaw = self.openclaw_client.read().await;
@@ -309,17 +334,20 @@ impl Bridge {
     }
 
     /// Resolve session key
-    fn resolve_session_key(&self, msg: &WebhookMessage) -> String {
+    fn resolve_session_key(
+        &self,
+        msg: &WebhookMessage,
+        agent_id: &str,
+        session_scope: &sessions::SessionScope,
+    ) -> String {
         // Use explicit session if provided
         if let Some(ref session) = msg.session {
             return sessions::normalize_session_key(session);
         }
 
         // Try to build from peer info
-        let peer_kind = Self::coalesce_string(&[
-            msg.peer_kind.as_deref(),
-            msg.chat_type.as_deref(),
-        ]);
+        let peer_kind =
+            Self::coalesce_string(&[msg.peer_kind.as_deref(), msg.chat_type.as_deref()]);
         let peer_id = Self::coalesce_string(&[
             msg.peer_id.as_deref(),
             msg.chat_id.as_deref(),
@@ -327,13 +355,15 @@ impl Bridge {
         ]);
 
         if let (Some(kind), Some(id)) = (peer_kind, peer_id) {
-            if let Some(key) = sessions::build_webhook_session_key(&sessions::WebhookSessionParams {
-                agent_id: self.agent_id.clone(),
-                peer_kind: kind.to_string(),
-                peer_id: id.to_string(),
-                topic_id: msg.topic_id.clone(),
-                thread_id: msg.thread_id.clone(),
-            }) {
+            if let Some(key) =
+                sessions::build_webhook_session_key(&sessions::WebhookSessionParams {
+                    agent_id: agent_id.to_string(),
+                    peer_kind: kind.to_string(),
+                    peer_id: id.to_string(),
+                    topic_id: msg.topic_id.clone(),
+                    thread_id: msg.thread_id.clone(),
+                })
+            {
                 return key;
             }
         }
@@ -344,7 +374,7 @@ impl Bridge {
             content: msg.content.clone(),
             session: msg.session.clone(),
         };
-        sessions::resolve_session_key(&self.session_scope, &webhook_msg)
+        sessions::resolve_session_key(session_scope, &webhook_msg)
     }
 
     /// Helper to get first non-empty string
@@ -366,9 +396,7 @@ impl Bridge {
 
         match peer_kind {
             "dm" => msg.thread_id.clone(),
-            "group" | "channel" => {
-                msg.topic_id.clone().or_else(|| msg.thread_id.clone())
-            }
+            "group" | "channel" => msg.topic_id.clone().or_else(|| msg.thread_id.clone()),
             _ => None,
         }
     }
@@ -376,7 +404,9 @@ impl Bridge {
     /// Check if content is a reset trigger
     fn is_reset_trigger(&self, content: &str) -> bool {
         let trimmed = content.trim();
-        sessions::DEFAULT_RESET_TRIGGERS.iter().any(|&trigger| trimmed == trigger)
+        sessions::DEFAULT_RESET_TRIGGERS
+            .iter()
+            .any(|&trigger| trimmed == trigger)
     }
 
     /// Strip reset trigger from content
@@ -411,7 +441,9 @@ impl Bridge {
                     let session_key = msg.session.as_deref().unwrap_or("global");
                     let openclaw = self.openclaw_client.read().await;
                     if let Some(ref client) = *openclaw {
-                        client.send_agent_request(forward_content, session_key).await?;
+                        client
+                            .send_agent_request(forward_content, session_key)
+                            .await?;
                     }
                     return Ok(());
                 }

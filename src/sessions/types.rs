@@ -109,21 +109,24 @@ pub fn build_webhook_session_key(params: &WebhookSessionParams) -> Option<String
     if params.peer_kind.is_empty() || params.peer_id.is_empty() {
         return None;
     }
-    
-    let mut key = format!("webhook:{}:{}:{}", params.agent_id, params.peer_kind, params.peer_id);
-    
+
+    let mut key = format!(
+        "webhook:{}:{}:{}",
+        params.agent_id, params.peer_kind, params.peer_id
+    );
+
     if let Some(ref topic_id) = params.topic_id {
         if !topic_id.is_empty() {
             key.push_str(&format!(":{}", topic_id));
         }
     }
-    
+
     if let Some(ref thread_id) = params.thread_id {
         if !thread_id.is_empty() {
             key.push_str(&format!(":{}", thread_id));
         }
     }
-    
+
     Some(key)
 }
 
