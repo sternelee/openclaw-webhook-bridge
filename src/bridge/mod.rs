@@ -379,12 +379,10 @@ impl Bridge {
 
     /// Helper to get first non-empty string
     fn coalesce_string(values: &[Option<&str>]) -> Option<String> {
-        for val in values {
-            if let Some(v) = val {
-                let trimmed = v.trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
-                }
+        for v in values.iter().flatten() {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
             }
         }
         None
@@ -404,9 +402,7 @@ impl Bridge {
     /// Check if content is a reset trigger
     fn is_reset_trigger(&self, content: &str) -> bool {
         let trimmed = content.trim();
-        sessions::DEFAULT_RESET_TRIGGERS
-            .iter()
-            .any(|&trigger| trimmed == trigger)
+        sessions::DEFAULT_RESET_TRIGGERS.contains(&trimmed)
     }
 
     /// Strip reset trigger from content
@@ -416,10 +412,10 @@ impl Bridge {
             if trimmed == trigger {
                 return String::new();
             }
-            if trimmed.starts_with(trigger) && trimmed.len() > trigger.len() {
-                if trimmed.chars().nth(trigger.len()) == Some(' ') {
-                    return trimmed[trigger.len() + 1..].trim().to_string();
-                }
+            if trimmed.starts_with(trigger) && trimmed.len() > trigger.len()
+                && trimmed.chars().nth(trigger.len()) == Some(' ')
+            {
+                return trimmed[trigger.len() + 1..].trim().to_string();
             }
         }
         content.to_string()
@@ -433,9 +429,8 @@ impl Bridge {
             Ok(resp) => resp,
             Err(e) => {
                 let err_str = e.to_string();
-                if err_str.starts_with("FORWARD_TO_GATEWAY:") {
+                if let Some(forward_content) = err_str.strip_prefix("FORWARD_TO_GATEWAY:") {
                     // Forward to gateway
-                    let forward_content = &err_str["FORWARD_TO_GATEWAY:".len()..];
                     info!("[Bridge] Forwarding to Gateway: {}", forward_content);
 
                     let session_key = msg.session.as_deref().unwrap_or("global");

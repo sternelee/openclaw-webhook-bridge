@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 /// Main configuration for the bridge
@@ -66,7 +66,7 @@ pub fn config_dir() -> Result<PathBuf> {
 }
 
 /// Find a config file from a list of candidates
-fn find_config_file(dir: &PathBuf, candidates: &[&str]) -> Result<PathBuf> {
+fn find_config_file(dir: &Path, candidates: &[&str]) -> Result<PathBuf> {
     for name in candidates {
         let path = dir.join(name);
         if path.exists() {
@@ -106,7 +106,7 @@ pub fn load() -> Result<Config> {
     // Build config with defaults
     let agent_id = br_cfg.agent_id.unwrap_or_else(|| "main".to_string());
     let gateway_port = gw_cfg.gateway.port.unwrap_or(18789);
-    let uid = br_cfg.uid.unwrap_or_else(|| generate_uid());
+    let uid = br_cfg.uid.unwrap_or_else(generate_uid);
     let session_store_path = dir.join("sessions.json").to_string_lossy().to_string();
 
     Ok(Config {

@@ -135,6 +135,7 @@ pub fn build_webhook_session_key(params: &WebhookSessionParams) -> Option<String
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[allow(dead_code)]
+#[allow(clippy::enum_variant_names)]
 pub enum ControlMessageType {
     SessionGet,
     SessionList,

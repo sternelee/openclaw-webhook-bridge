@@ -64,6 +64,7 @@ impl Store {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&self.config.store_path)?;
 
         file.lock_shared()?;

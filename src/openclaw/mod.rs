@@ -113,6 +113,7 @@ impl Client {
     }
 
     /// Connection loop with auto-reconnect
+    #[allow(clippy::too_many_arguments)]
     async fn connection_loop(
         port: u16,
         token: String,

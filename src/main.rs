@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    let command = cli.command.unwrap_or_else(|| Commands::Run {
+    let command = cli.command.unwrap_or(Commands::Run {
         webhook_url: None,
         uid: None,
     });
@@ -115,10 +115,7 @@ async fn main() -> Result<()> {
 fn display_uid_and_qrcode(uid: &str, webhook_url: &str) {
     println!();
     println!("╔══════════════════════════════════════════════════════════╗");
-    println!(
-        "║  {}                                         ║",
-        format!("Bridge UID: {}", uid)
-    );
+    println!("║  Bridge UID: {:36} ║", uid);
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
 
