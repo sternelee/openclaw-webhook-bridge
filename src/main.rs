@@ -149,6 +149,11 @@ fn cmd_restart(webhook_url: Option<String>, uid: Option<String>) -> Result<()> {
 }
 
 async fn cmd_run(webhook_url: Option<String>, uid: Option<String>) -> Result<()> {
+    // Initialize logger for foreground run (before any log output)
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format_timestamp_millis()
+        .init();
+
     // Handle interactive input if not provided
     let webhook_url = load_or_prompt_webhook_url(webhook_url)?;
     let uid = load_or_prompt_uid(uid)?;
