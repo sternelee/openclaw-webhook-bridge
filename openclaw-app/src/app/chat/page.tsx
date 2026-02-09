@@ -12,6 +12,7 @@ import { MessageGroup, groupMessages, ChatInput, StreamingMessage, ReadingIndica
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Icons } from "@/components/ui/icons";
+import { MobileNavigation, MobileHeader } from "@/components/layout";
 import { loadSettings, saveSettings } from "@/types/storage";
 import * as SessionStorage from "@/lib/session-storage";
 
@@ -22,6 +23,7 @@ export default function ChatPage() {
   const [sidebarContent, setSidebarContent] = useState<string | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const {
     connected,
@@ -134,68 +136,91 @@ export default function ChatPage() {
   // Get sessions list
   const localSessions = getLocalSessions();
 
+  // Header leading content (title and session selector)
+  const headerLeadingContent = (
+    <>
+      <h1 className="text-base md:text-lg font-semibold truncate">Chat</h1>
+      <SessionSelector
+        currentSessionKey={sessionKey}
+        sessions={localSessions}
+        onSessionSwitch={handleSessionSwitch}
+        onNewSession={handleNewSession}
+        loading={false}
+      />
+    </>
+  );
+
   return (
     <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
+      {/* Header - responsive with mobile menu */}
       {!focusMode && (
-        <header className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-card/50 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold">Chat</h1>
-            <SessionSelector
-              currentSessionKey={sessionKey}
-              sessions={localSessions}
-              onSessionSwitch={handleSessionSwitch}
-              onNewSession={handleNewSession}
-              loading={false}
-            />
+        <>
+          <div className="md:hidden">
+            <MobileNavigation />
           </div>
-          <div className="flex items-center gap-2">
-            {/* Abort button when streaming */}
-            {sending && runId && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleAbort}
-                className="gap-1 animate-pulse"
-                title="Stop the current response"
-              >
-                <Icons.x className="h-4 w-4" />
-                Stop
-              </Button>
-            )}
-
-            {/* Connection status */}
-            <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
-              connected ? "bg-ok/10 text-ok" : "bg-muted/50 text-muted-foreground"
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-ok animate-pulse" : ""}`} />
-              {connected ? "Connected" : "Disconnected"}
+          <MobileHeader
+            connected={connected}
+            sending={sending}
+            runId={runId}
+            showThinking={showThinking}
+            onToggleThinking={() => setShowThinking(!showThinking)}
+            onToggleFocusMode={handleToggleFocusMode}
+            onAbort={handleAbort}
+            leadingContent={headerLeadingContent}
+          />
+          {/* Desktop header */}
+          <header className="hidden md:flex items-center justify-between px-4 py-3 border-b border-border/50 bg-card/50 backdrop-blur">
+            <div className="flex items-center gap-3">
+              {headerLeadingContent}
             </div>
+            <div className="flex items-center gap-2">
+              {/* Abort button when streaming */}
+              {sending && runId && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleAbort}
+                  className="gap-1 animate-pulse"
+                  title="Stop the current response"
+                >
+                  <Icons.x className="h-4 w-4" />
+                  Stop
+                </Button>
+              )}
 
-            {/* Thinking toggle */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowThinking(!showThinking)}
-              className={`gap-1 ${showThinking ? "bg-accent/10" : ""}`}
-              title={showThinking ? "Hide thinking" : "Show thinking"}
-            >
-              <Icons.brain className="h-4 w-4" />
-              Thinking
-            </Button>
+              {/* Connection status */}
+              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
+                connected ? "bg-ok/10 text-ok" : "bg-muted/50 text-muted-foreground"
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-ok animate-pulse" : ""}`} />
+                {connected ? "Connected" : "Disconnected"}
+              </div>
 
-            {/* Focus mode toggle */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleToggleFocusMode}
-              className="gap-1"
-            >
-              <Icons.maximize className="h-4 w-4" />
-              Focus
-            </Button>
-          </div>
-        </header>
+              {/* Thinking toggle */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowThinking(!showThinking)}
+                className={`gap-1 ${showThinking ? "bg-accent/10" : ""}`}
+                title={showThinking ? "Hide thinking" : "Show thinking"}
+              >
+                <Icons.brain className="h-4 w-4" />
+                Thinking
+              </Button>
+
+              {/* Focus mode toggle */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleToggleFocusMode}
+                className="gap-1"
+              >
+                <Icons.maximize className="h-4 w-4" />
+                Focus
+              </Button>
+            </div>
+          </header>
+        </>
       )}
 
       {/* Focus mode exit button */}
@@ -203,7 +228,7 @@ export default function ChatPage() {
         <button
           type="button"
           onClick={handleToggleFocusMode}
-          className="absolute top-4 right-4 z-50 p-2 rounded-lg bg-card/50 hover:bg-card border border-border/50"
+          className="absolute top-4 right-4 z-50 p-2 rounded-lg bg-card/50 hover:bg-card border border-border/50 touch-target"
           aria-label="Exit focus mode"
         >
           <Icons.x className="h-4 w-4" />
@@ -214,15 +239,15 @@ export default function ChatPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Chat thread */}
         <div className="flex-1 flex flex-col min-w-0 relative">
-          <div 
+          <div
             ref={scrollRef}
-            className="flex-1 overflow-y-auto px-4"
+            className="flex-1 overflow-y-auto px-3 md:px-4"
             onScroll={handleScroll}
           >
             <div className="py-4">
               {!connected && (
                 <div className="flex items-center justify-center py-12">
-                  <div className="text-center">
+                  <div className="text-center px-4">
                     <Icons.wifiOff className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                     <h3 className="text-lg font-medium mb-2">Not Connected</h3>
                     <p className="text-sm text-muted-foreground mb-4">
@@ -237,7 +262,7 @@ export default function ChatPage() {
 
               {connected && chatItems.length === 0 && (
                 <div className="flex items-center justify-center py-12">
-                  <div className="text-center">
+                  <div className="text-center px-4">
                     <Icons.messageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                     <h3 className="text-lg font-medium mb-2">Start a conversation</h3>
                     <p className="text-sm text-muted-foreground">
@@ -258,7 +283,7 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={scrollToBottom}
-              className="absolute bottom-4 right-8 z-10 p-2.5 rounded-full bg-accent hover:bg-accent/80 border border-border/50 shadow-lg transition-all hover:scale-105"
+              className="absolute bottom-4 right-4 md:right-8 z-10 p-2.5 rounded-full bg-accent hover:bg-accent/80 border border-border/50 shadow-lg transition-all hover:scale-105 touch-target"
               aria-label="Scroll to bottom"
               title="New messages - scroll to bottom"
             >
@@ -278,12 +303,12 @@ export default function ChatPage() {
           />
         </div>
 
-        {/* Sidebar for tool output etc. */}
+        {/* Sidebar for tool output etc. - desktop only */}
         {sidebarOpen && (
           <>
             {/* Resizer handle */}
-            <div className="w-1 hover:bg-accent cursor-col-resize" />
-            <aside className="w-80 border-l border-border/50 bg-card/50 flex flex-col">
+            <div className="hidden md:block w-1 hover:bg-accent cursor-col-resize" />
+            <aside className="hidden md:block w-80 border-l border-border/50 bg-card/50 flex flex-col">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
                 <h2 className="font-medium">Details</h2>
                 <Button variant="ghost" size="sm" onClick={handleCloseSidebar}>

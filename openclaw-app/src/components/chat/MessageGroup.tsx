@@ -78,28 +78,28 @@ export function MessageGroup({ messages, role, timestamp, onViewToolDetail }: Me
   };
 
   return (
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""} mb-4 group`}>
-      {/* Avatar */}
+    <div className={`flex gap-2 md:gap-3 ${isUser ? "flex-row-reverse" : ""} mb-3 md:mb-4 group`}>
+      {/* Avatar - hide on mobile for user messages */}
       {!isUser && roleInfo.icon && (
-        <div className={`flex-shrink-0 w-8 h-8 rounded-full ${roleInfo.bgColor} flex items-center justify-center`}>
+        <div className={`hidden md:flex flex-shrink-0 w-8 h-8 rounded-full ${roleInfo.bgColor} items-center justify-center`}>
           <roleInfo.icon className="h-4 w-4 text-muted-foreground" />
         </div>
       )}
 
       {/* Messages */}
-      <div className={`flex flex-col gap-1 max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
-        {/* Role header (only for non-user) */}
+      <div className={`flex flex-col gap-1 max-w-[85%] md:max-w-[80%] ${isUser ? "items-end" : "items-start"} w-full`}>
+        {/* Role header (only for non-user) - compact on mobile */}
         {!isUser && (
-          <div className="flex items-center gap-2 px-1">
+          <div className="flex items-center gap-1.5 md:gap-2 px-1">
             <span className="text-xs font-medium text-muted-foreground">{roleInfo.label}</span>
-            <span className="text-xs text-muted-foreground/50">{timeString}</span>
+            <span className="text-xs text-muted-foreground/50 hidden sm:inline">{timeString}</span>
             {messages.length > 1 && (
               <span className="text-xs text-muted-foreground/50">{messages.length} messages</span>
             )}
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 px-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-7 w-7 md:h-5 md:w-auto md:px-1.5 opacity-0 group-hover:opacity-100 transition-opacity p-0 md:p-auto"
               onClick={handleCopyAll}
               title={copied ? "Copied!" : copyError ? "Copy failed" : "Copy all messages"}
             >
@@ -110,6 +110,7 @@ export function MessageGroup({ messages, role, timestamp, onViewToolDetail }: Me
               ) : (
                 <Icons.copy className="h-3 w-3" />
               )}
+              <span className="hidden md:inline ml-1">{copied ? "Copied" : copyError ? "Error" : "Copy"}</span>
             </Button>
           </div>
         )}

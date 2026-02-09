@@ -17,8 +17,10 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar - hidden in focus mode */}
-      <Sidebar />
+      {/* Sidebar - hidden on mobile and in focus mode */}
+      <div className="hidden md:block">
+        <Sidebar />
+      </div>
 
       {/* Main content */}
       <main className="flex-1 overflow-hidden">{children}</main>

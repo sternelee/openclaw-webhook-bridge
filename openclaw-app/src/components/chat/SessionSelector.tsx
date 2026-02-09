@@ -58,12 +58,12 @@ export function SessionSelector({
         <Button
           variant="ghost"
           size="sm"
-          className="gap-2 max-w-[200px]"
+          className="gap-1.5 md:gap-2 max-w-[150px] md:max-w-[200px] h-8 md:h-auto px-2"
           disabled={loading}
         >
-          <Icons.messageSquare className="h-4 w-4" />
-          <span className="truncate">{currentLabel}</span>
-          <Icons.chevronDown className="h-3 w-3 opacity-50" />
+          <Icons.messageSquare className="h-4 w-4 flex-shrink-0" />
+          <span className="truncate text-sm">{currentLabel}</span>
+          <Icons.chevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[280px]">
@@ -98,9 +98,9 @@ export function SessionSelector({
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {isActive ? (
-                      <Icons.check className="h-4 w-4 text-ok" />
+                      <Icons.check className="h-4 w-4 text-ok flex-shrink-0" />
                     ) : (
-                      <div className="h-4 w-4" />
+                      <div className="h-4 w-4 flex-shrink-0" />
                     )}
                     <div className="flex flex-col flex-1 min-w-0">
                       <span className="text-sm font-medium truncate">{displayLabel}</span>
@@ -114,7 +114,10 @@ export function SessionSelector({
         )}
 
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleNewSession} className="gap-2">
+        <DropdownMenuItem
+          onClick={handleNewSession}
+          className="gap-2 cursor-pointer touch-target"
+        >
           <Icons.filePlus className="h-4 w-4" />
           <span>New Session</span>
         </DropdownMenuItem>
