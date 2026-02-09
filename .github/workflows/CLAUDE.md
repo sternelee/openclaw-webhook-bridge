@@ -7,6 +7,10 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #929 | 7:20 PM | 🟣 | Removed Linux ARM64 from release documentation | ~150 |
+| #928 | " | 🔴 | Removed ARM64 Linux target from release workflow | ~246 |
+| #927 | " | 🔴 | Updated release workflow to use cross tool for ARM64 cross-compilation | ~266 |
+| #926 | 7:19 PM | 🟣 | Added explicit linker configuration for ARM64 cross-compilation | ~220 |
 | #915 | 7:14 PM | 🟣 | Removed Linux musl build target from release workflow | ~203 |
 | #914 | " | 🟣 | Removed Linux musl target from release workflow | ~162 |
 | #894 | 7:08 PM | 🟣 | Updated ci.yml documentation artifact name | ~120 |

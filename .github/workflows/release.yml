@@ -20,10 +20,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: openclaw-bridge
             asset_name: openclaw-bridge-linux-amd64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: openclaw-bridge
-            asset_name: openclaw-bridge-linux-arm64
 
           # macOS
           - os: macos-latest
@@ -54,14 +50,17 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux ARM64)
+      - name: Install cross
         if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+        run: cargo install cross
 
-      - name: Build release binary
+      - name: Build release binary (native)
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build release binary (cross-compile ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Strip binary (Linux/macOS)
         if: runner.os != 'Windows'
@@ -130,7 +129,6 @@ jobs:
             | Platform | Download |
             |----------|----------|
             | Linux AMD64 | `openclaw-bridge-linux-amd64.tar.gz` |
-            | Linux ARM64 | `openclaw-bridge-linux-arm64.tar.gz` |
             | macOS AMD64 (Intel) | `openclaw-bridge-darwin-amd64.tar.gz` |
             | macOS ARM64 (Apple Silicon) | `openclaw-bridge-darwin-arm64.tar.gz` |
             | Windows AMD64 | `openclaw-bridge-windows-amd64.zip` |

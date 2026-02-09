@@ -26,11 +26,6 @@
 curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/openclaw-bridge-linux-amd64 && mv openclaw-bridge-linux-amd64 openclaw-bridge && chmod +x openclaw-bridge
 ```
 
-**Linux (arm64)**
-```bash
-curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/openclaw-bridge-linux-arm64 && mv openclaw-bridge-linux-arm64 openclaw-bridge && chmod +x openclaw-bridge
-```
-
 **macOS (arm64 / Apple Silicon)**
 ```bash
 curl -sLO https://github.com/sternelee/openclaw-webhook-bridge/releases/latest/download/openclaw-bridge-darwin-arm64 && mv openclaw-bridge-darwin-arm64 openclaw-bridge && chmod +x openclaw-bridge
