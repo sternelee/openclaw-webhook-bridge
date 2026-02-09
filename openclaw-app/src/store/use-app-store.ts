@@ -4,7 +4,7 @@
 
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import type { GatewayClient } from '@/lib/utils-gateway';
+import type { GatewayClient, WebhookMessage } from '@/lib/utils-gateway';
 import type {
   ChatMessage,
   ChatAttachment,
@@ -189,20 +189,73 @@ export const useAppStore = create<AppState>()(
           // Stop existing client if any
           client?.stop();
 
+          // Detect if connecting to Webhook (not Gateway)
+          // Webhook URLs typically don't have port 18789 or localhost
+          const isWebhookMode = !gatewayUrl.includes(':18789') && !gatewayUrl.includes('localhost') && !gatewayUrl.includes('127.0.0.1');
+
           // Import GatewayClient dynamically to avoid circular dependencies
           import('@/lib/utils-gateway').then(({ GatewayClient }) => {
             const newClient = new GatewayClient({
               url: gatewayUrl,
               token,
               uid,
-              mode: 'control-ui',
+              mode: isWebhookMode ? 'bridge' : 'control-ui',
+              useWebhookMode: isWebhookMode,
               onHello: (hello) => {
                 set({ hello: hello, connected: true, lastError: null });
                 console.log('[Gateway] Connected:', hello);
               },
               onEvent: (evt) => {
                 console.log('[Gateway] Event:', evt);
-                // Handle agent events
+                
+                // Handle chat events (from Gateway)
+                if (evt.event === 'chat') {
+                  const payload = evt.payload as any;
+                  
+                  // Extract text from content array
+                  const extractText = (content: any): string => {
+                    if (!content) return '';
+                    if (typeof content === 'string') return content;
+                    if (Array.isArray(content)) {
+                      return content
+                        .filter((c) => c.type === 'text')
+                        .map((c) => c.text || '')
+                        .join('');
+                    }
+                    return '';
+                  };
+                  
+                  if (payload.state === 'delta') {
+                    // Streaming response
+                    const text = extractText(payload.message?.content);
+                    if (text) {
+                      set((state) => ({
+                        stream: (state.stream || '') + text,
+                      }));
+                    }
+                  } else if (payload.state === 'final') {
+                    // Final response
+                    if (payload.message) {
+                      const text = extractText(payload.message.content);
+                      const message: ChatMessage = {
+                        role: payload.message.role || 'assistant',
+                        content: text,
+                        timestamp: payload.message.timestamp || Date.now(),
+                      };
+                      get().addMessage(message);
+                    }
+                    set({ stream: null, sending: false });
+                  } else if (payload.state === 'error') {
+                    set({
+                      stream: null,
+                      sending: false,
+                      lastError: extractText(payload.message?.content) || 'An error occurred',
+                    });
+                  }
+                  return;
+                }
+                
+                // Handle agent events (legacy/bridge format)
                 if (evt.event === 'agent.delta') {
                   // Delta event - streaming response
                   const payload = evt.payload as any;
@@ -252,7 +305,7 @@ export const useAppStore = create<AppState>()(
         },
 
         sendMessage: async (content, attachments?) => {
-          const { client } = get();
+          const { client, sessionKey, uid } = get();
           if (!client || !client.connected) {
             set({ lastError: 'Not connected to gateway' });
             return null;
@@ -273,8 +326,23 @@ export const useAppStore = create<AppState>()(
 
             set((state) => ({ messages: [...state.messages, userMessage] }));
 
-            // Send via gateway (will be implemented)
+            // Send via Webhook simple format to bridge
             const runId = `run-${Date.now()}`;
+            const msg: WebhookMessage = {
+              id: runId,
+              content: trimmed,
+              sender_id: uid || 'webchat-user',
+              session: sessionKey || 'main',
+              peerKind: 'dm',
+              peerId: uid || 'webchat-user',
+              chatType: 'dm',
+              chatId: uid || 'webchat-user',
+              senderId: uid || 'webchat-user',
+            };
+
+            // Cast to any to access sendWebhookMessage method
+            (client as any).sendWebhookMessage(msg);
+
             set({ runId, stream: '', streamStartedAt: Date.now() });
 
             return runId;

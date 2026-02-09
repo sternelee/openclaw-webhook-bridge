@@ -60,6 +60,8 @@ export interface GatewayClientOptions {
   platform?: string;
   mode?: GatewayClientMode;
   instanceId?: string;
+  /** Use Webhook simple format mode (skip Gateway protocol handshake) */
+  useWebhookMode?: boolean;
   onHello?: (hello: GatewayHelloOk) => void;
   onEvent?: (evt: GatewayEventFrame) => void;
   onClose?: (info: { code: number; reason: string }) => void;

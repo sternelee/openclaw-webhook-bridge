@@ -1,5 +1,6 @@
 /**
  * Gateway WebSocket client for OpenClaw communication.
+ * Also supports Webhook simple message format for bridge mode.
  */
 
 import type {
@@ -17,6 +18,26 @@ type Pending = {
 
 // 4008 = application-defined code (browser rejects 1008 "Policy Violation")
 const CONNECT_FAILED_CLOSE_CODE = 4008;
+
+/** Webhook simple message format */
+export interface WebhookMessage {
+  id: string;
+  content: string;
+  sender_id?: string;
+  session?: string;
+  peerKind?: string;
+  peerId?: string;
+  chatType?: string;
+  chatId?: string;
+  senderId?: string;
+}
+
+/** Bridge response format */
+export interface BridgeResponse {
+  type: "progress" | "complete" | "error";
+  content: string;
+  session?: string;
+}
 
 export class GatewayClient {
   private ws: WebSocket | null = null;
@@ -86,6 +107,19 @@ export class GatewayClient {
       this.connectTimer = null;
     }
 
+    // In Webhook mode, skip Gateway protocol handshake
+    if (this.opts.useWebhookMode) {
+      this.backoffMs = 800;
+      // Simulate a hello response for compatibility
+      const mockHello: GatewayHelloOk = {
+        type: "hello-ok",
+        protocol: 3,
+        features: { methods: [], events: ["agent.delta", "agent.final", "agent.error"] },
+      };
+      this.opts.onHello?.(mockHello);
+      return;
+    }
+
     const scopes = ["operator.admin", "operator.approvals", "operator.pairing"];
     const role = "operator";
     const auth =
@@ -132,6 +166,68 @@ export class GatewayClient {
     }
 
     const frame = parsed as { type?: unknown };
+
+    // Handle Bridge response format (progress/complete/error)
+    if (frame.type === "progress" || frame.type === "complete" || frame.type === "error") {
+      const bridgeRes = parsed as BridgeResponse;
+      console.log("[gateway] Bridge response:", bridgeRes);
+      
+      // Convert Bridge response to Gateway event format for compatibility
+      if (bridgeRes.type === "progress" || bridgeRes.type === "complete") {
+        // For progress/complete, send as agent.delta (streaming)
+        const evt: GatewayEventFrame = {
+          type: "event",
+          event: "agent.delta",
+          payload: {
+            content: bridgeRes.content, // Use 'content', not 'text'
+            sessionKey: bridgeRes.session,
+          },
+        };
+        try {
+          this.opts.onEvent?.(evt);
+        } catch (err) {
+          console.error("[gateway] bridge response handler error:", err);
+        }
+        
+        // If complete, also send final event to stop streaming
+        if (bridgeRes.type === "complete") {
+          const finalEvt: GatewayEventFrame = {
+            type: "event",
+            event: "agent.final",
+            payload: {
+              message: {
+                role: "assistant",
+                content: bridgeRes.content,
+                timestamp: Date.now(),
+              },
+              sessionKey: bridgeRes.session,
+            },
+          };
+          try {
+            this.opts.onEvent?.(finalEvt);
+          } catch (err) {
+            console.error("[gateway] bridge final handler error:", err);
+          }
+        }
+      } else if (bridgeRes.type === "error") {
+        const evt: GatewayEventFrame = {
+          type: "event",
+          event: "agent.abort",
+          payload: {
+            error: bridgeRes.content,
+            sessionKey: bridgeRes.session,
+          },
+        };
+        try {
+          this.opts.onEvent?.(evt);
+        } catch (err) {
+          console.error("[gateway] bridge error handler error:", err);
+        }
+      }
+      return;
+    }
+
+    // Handle Gateway protocol
     if (frame.type === "event") {
       const evt = parsed as GatewayEventFrame;
       if (evt.event === "connect.challenge") {
@@ -183,6 +279,18 @@ export class GatewayClient {
     });
     this.ws.send(JSON.stringify(frame));
     return p;
+  }
+
+  /**
+   * Send message in Webhook simple format (for bridge mode)
+   * This bypasses the Gateway protocol and sends raw message to bridge
+   */
+  sendWebhookMessage(msg: WebhookMessage): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error("[gateway] Cannot send: not connected");
+      return;
+    }
+    this.ws.send(JSON.stringify(msg));
   }
 
   private queueConnect() {
