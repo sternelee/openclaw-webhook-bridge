@@ -35,8 +35,8 @@
    */
   "migrations": [
     {
-      "tag": "v1",
-      "delete_classes": ["WebSocketHub"]
+      "tag": "v2-delete-websocket-hub",
+      "deleted_classes": ["WebSocketHub"]
     }
   ],
   /**
