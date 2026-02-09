@@ -59,6 +59,14 @@ export interface ChatAttachment {
   fileName: string;
 }
 
+/** Chat queue item for queued messages */
+export interface ChatQueueItem {
+  id: string;
+  text: string;
+  attachments?: ChatAttachment[];
+  timestamp: number;
+}
+
 /** Chat event payload from gateway */
 export interface ChatEventPayload {
   runId: string;

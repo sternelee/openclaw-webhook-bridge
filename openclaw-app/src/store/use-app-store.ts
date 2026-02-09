@@ -8,11 +8,13 @@ import type { GatewayClient, WebhookMessage } from '@/lib/utils-gateway';
 import type {
   ChatMessage,
   ChatAttachment,
+  ChatQueueItem,
   GatewayHelloOk,
   SessionsListResult,
   PresenceEntry,
   EventLogEntry,
 } from '@/types';
+import * as SessionStorage from '@/lib/session-storage';
 
 interface AppState {
   // Connection state
@@ -34,6 +36,7 @@ interface AppState {
   runId: string | null;
   draft: string;
   attachments: ChatAttachment[];
+  queue: ChatQueueItem[];
   showThinking: boolean;
   focusMode: boolean;
 
@@ -69,6 +72,10 @@ interface AppState {
   setAttachments: (attachments: ChatAttachment[]) => void;
   addAttachment: (attachment: ChatAttachment) => void;
   removeAttachment: (id: string) => void;
+  setQueue: (queue: ChatQueueItem[]) => void;
+  addToQueue: (item: ChatQueueItem) => void;
+  removeFromQueue: (id: string) => void;
+  processQueue: () => void;
   setShowThinking: (show: boolean) => void;
   setFocusMode: (focus: boolean) => void;
 
@@ -100,6 +107,10 @@ interface AppState {
   ) => Promise<void>;
   deleteSession: (key: string) => Promise<void>;
   resetSession: () => void;
+  createNewSession: () => void;
+  switchSession: (key: string) => void;
+  getLocalSessions: () => SessionStorage.SessionMetadata[];
+  saveCurrentSession: () => void;
 
   // Chat management
   loadChatHistory: () => Promise<void>;
@@ -128,6 +139,7 @@ export const useAppStore = create<AppState>()(
         runId: null,
         draft: '',
         attachments: [],
+        queue: [],
         showThinking: true,
         focusMode: false,
 
@@ -152,7 +164,11 @@ export const useAppStore = create<AppState>()(
         // Chat actions
         setSessionKey: (key) => set({ sessionKey: key }),
         setMessages: (messages) => set({ messages }),
-        addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
+        addMessage: (message) => {
+          set((state) => ({ messages: [...state.messages, message] }));
+          // Auto-save to localStorage
+          setTimeout(() => get().saveCurrentSession(), 100);
+        },
         setThinkingLevel: (level) => set({ thinkingLevel: level }),
         setSending: (sending) => set({ sending }),
         setStream: (stream) => set({ stream }),
@@ -166,6 +182,21 @@ export const useAppStore = create<AppState>()(
           set((state) => ({
             attachments: state.attachments.filter((a) => a.id !== id),
           })),
+        setQueue: (queue) => set({ queue }),
+        addToQueue: (item) =>
+          set((state) => ({ queue: [...state.queue, item] })),
+        removeFromQueue: (id) =>
+          set((state) => ({
+            queue: state.queue.filter((q) => q.id !== id),
+          })),
+        processQueue: () => {
+          const { queue, sending } = get();
+          if (sending || queue.length === 0) return;
+          
+          const nextItem = queue[0];
+          get().removeFromQueue(nextItem.id);
+          get().sendMessage(nextItem.text, nextItem.attachments);
+        },
         setShowThinking: (show) => set({ showThinking: show }),
         setFocusMode: (focus) => set({ focusMode: focus }),
 
@@ -245,6 +276,8 @@ export const useAppStore = create<AppState>()(
                       get().addMessage(message);
                     }
                     set({ stream: null, sending: false });
+                    // Process queue after response completes
+                    setTimeout(() => get().processQueue(), 100);
                   } else if (payload.state === 'error') {
                     set({
                       stream: null,
@@ -271,6 +304,8 @@ export const useAppStore = create<AppState>()(
                     get().addMessage(payload.message);
                   }
                   set({ stream: null, sending: false });
+                  // Process queue after response completes
+                  setTimeout(() => get().processQueue(), 100);
                 } else if (evt.event === 'agent.abort') {
                   // Abort event
                   const payload = evt.payload as any;
@@ -305,7 +340,7 @@ export const useAppStore = create<AppState>()(
         },
 
         sendMessage: async (content, attachments?) => {
-          const { client, sessionKey, uid } = get();
+          const { client, sessionKey, uid, sending } = get();
           if (!client || !client.connected) {
             set({ lastError: 'Not connected to gateway' });
             return null;
@@ -313,6 +348,18 @@ export const useAppStore = create<AppState>()(
 
           const trimmed = content.trim();
           if (!trimmed && !attachments?.length) return null;
+
+          // If already sending, queue the message
+          if (sending) {
+            const queueItem: ChatQueueItem = {
+              id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              text: trimmed,
+              attachments,
+              timestamp: Date.now(),
+            };
+            get().addToQueue(queueItem);
+            return null;
+          }
 
           set({ sending: true, lastError: null });
 
@@ -397,18 +444,114 @@ export const useAppStore = create<AppState>()(
             stream: null,
             streamStartedAt: null,
             runId: null,
+            draft: '',
+            attachments: [],
+            queue: [],
+            sending: false,
           });
+        },
+
+        createNewSession: () => {
+          // Create new session via storage utility
+          const metadata = SessionStorage.createNewSession();
+          
+          console.log('[Store] Creating new session:', metadata.key);
+          
+          set({
+            sessionKey: metadata.key,
+            messages: [],
+            thinkingLevel: null,
+            stream: null,
+            streamStartedAt: null,
+            runId: null,
+            draft: '',
+            attachments: [],
+            queue: [],
+            sending: false,
+          });
+        },
+
+        switchSession: (key) => {
+          console.log('[Store] Switching to session:', key);
+          
+          // Load session data from localStorage
+          const sessionData = SessionStorage.getSessionData(key);
+          
+          if (sessionData) {
+            set({
+              sessionKey: key,
+              messages: sessionData.messages,
+              thinkingLevel: null,
+              stream: null,
+              streamStartedAt: null,
+              runId: null,
+              draft: '',
+              attachments: [],
+              queue: [],
+              sending: false,
+            });
+          } else {
+            // Session not found, create it
+            set({
+              sessionKey: key,
+              messages: [],
+              thinkingLevel: null,
+              stream: null,
+              streamStartedAt: null,
+              runId: null,
+              draft: '',
+              attachments: [],
+              queue: [],
+              sending: false,
+            });
+          }
+        },
+
+        getLocalSessions: () => {
+          return SessionStorage.getSessionsList();
+        },
+
+        saveCurrentSession: () => {
+          const { sessionKey, messages } = get();
+          
+          const sessionData: SessionStorage.SessionData = {
+            metadata: {
+              key: sessionKey,
+              label: null,
+              messageCount: messages.length,
+              updatedAt: Date.now(),
+              createdAt: Date.now(), // Will be overwritten if exists
+            },
+            messages,
+          };
+          
+          // Merge with existing metadata if available
+          const existing = SessionStorage.getSessionData(sessionKey);
+          if (existing) {
+            sessionData.metadata.label = existing.metadata.label;
+            sessionData.metadata.createdAt = existing.metadata.createdAt;
+          }
+          
+          SessionStorage.saveSessionData(sessionKey, sessionData);
         },
 
         // Chat management
         loadChatHistory: async () => {
-          const { client } = get();
-          if (!client || !client.connected) return;
-
+          const { sessionKey } = get();
+          
           set({ sessionsLoading: true });
           try {
-            // Will be implemented with actual gateway call
-            set({ sessionsLoading: false });
+            // Load from localStorage
+            const sessionData = SessionStorage.getSessionData(sessionKey);
+            if (sessionData) {
+              set({ 
+                messages: sessionData.messages,
+                sessionsLoading: false 
+              });
+              console.log('[Store] Loaded chat history:', sessionData.messages.length, 'messages');
+            } else {
+              set({ sessionsLoading: false });
+            }
           } catch (error) {
             console.error('[Store] Failed to load chat history:', error);
             set({ sessionsLoading: false });

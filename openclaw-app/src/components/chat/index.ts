@@ -7,3 +7,5 @@ export { MessageGroup, groupMessages } from "./MessageGroup";
 export { StreamingMessage, ReadingIndicator } from "./StreamingMessage";
 export { ToolCardComponent } from "./ToolCard";
 export { ChatInput } from "./ChatInput";
+export { QueueDisplay } from "./QueueDisplay";
+export { SessionSelector } from "./SessionSelector";

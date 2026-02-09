@@ -3,8 +3,11 @@
  * Slack-style grouping for cleaner chat display.
  */
 
+import { useState } from "react";
 import { MessageBubble, getMessagePreview } from "./MessageBubble";
 import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import { copyToClipboard } from "@/lib/utils-chat";
 import type { ChatMessage } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 
@@ -16,6 +19,9 @@ interface MessageGroupProps {
 }
 
 export function MessageGroup({ messages, role, timestamp, onViewToolDetail }: MessageGroupProps) {
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+
   if (messages.length === 0) return null;
 
   const isUser = role === "user";
@@ -54,8 +60,25 @@ export function MessageGroup({ messages, role, timestamp, onViewToolDetail }: Me
   const roleInfo = getRoleInfo();
   const preview = messages.length > 0 ? getMessagePreview(messages[0], 60) : "";
 
+  const handleCopyAll = async () => {
+    // Copy all messages in the group as markdown
+    const allContent = messages
+      .map((msg) => (typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content)))
+      .join("\n\n---\n\n");
+    
+    const success = await copyToClipboard(allContent);
+    
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } else {
+      setCopyError(true);
+      setTimeout(() => setCopyError(false), 2000);
+    }
+  };
+
   return (
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""} mb-4`}>
+    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""} mb-4 group`}>
       {/* Avatar */}
       {!isUser && roleInfo.icon && (
         <div className={`flex-shrink-0 w-8 h-8 rounded-full ${roleInfo.bgColor} flex items-center justify-center`}>
@@ -73,15 +96,31 @@ export function MessageGroup({ messages, role, timestamp, onViewToolDetail }: Me
             {messages.length > 1 && (
               <span className="text-xs text-muted-foreground/50">{messages.length} messages</span>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 px-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={handleCopyAll}
+              title={copied ? "Copied!" : copyError ? "Copy failed" : "Copy all messages"}
+            >
+              {copied ? (
+                <Icons.check className="h-3 w-3 text-ok" />
+              ) : copyError ? (
+                <Icons.x className="h-3 w-3 text-destructive" />
+              ) : (
+                <Icons.copy className="h-3 w-3" />
+              )}
+            </Button>
           </div>
         )}
 
-        {/* Individual messages */}
+        {/* Individual messages - no headers */}
         {messages.map((message, index) => (
           <MessageBubble
             key={`${message.id || `${role}-${timestamp}-${index}`}`}
             message={message}
             onViewToolDetail={onViewToolDetail}
+            showHeader={false}
           />
         ))}
       </div>

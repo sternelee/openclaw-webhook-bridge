@@ -8,17 +8,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/use-app-store";
-import { MessageGroup, groupMessages, ChatInput, StreamingMessage, ReadingIndicator } from "@/components/chat";
+import { MessageGroup, groupMessages, ChatInput, StreamingMessage, ReadingIndicator, QueueDisplay, SessionSelector } from "@/components/chat";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Icons } from "@/components/ui/icons";
 import { loadSettings, saveSettings } from "@/types/storage";
+import * as SessionStorage from "@/lib/session-storage";
 
 export default function ChatPage() {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarContent, setSidebarContent] = useState<string | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   const {
     connected,
@@ -26,16 +29,22 @@ export default function ChatPage() {
     stream,
     streamStartedAt,
     sending,
+    runId,
     focusMode,
     showThinking,
     sessionKey,
+    queue,
     setFocusMode,
+    setShowThinking,
     connect,
     disconnect,
     sendMessage,
     abortRun,
-    resetSession,
+    createNewSession,
+    switchSession,
     loadChatHistory,
+    removeFromQueue,
+    getLocalSessions,
   } = useAppStore();
 
   // Load settings and connect on mount
@@ -45,14 +54,38 @@ export default function ChatPage() {
       connect();
     }
     loadChatHistory();
+    
+    // Cleanup old sessions (keep last 50)
+    SessionStorage.cleanupOldSessions(50);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && isAtBottom) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, stream]);
+  }, [messages.length, stream, isAtBottom]);
+
+  // Handle scroll events to detect if user is at bottom
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const threshold = 100; // pixels from bottom
+    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
+    setIsAtBottom(isNearBottom);
+    setShowScrollButton(!isNearBottom);
+  };
+
+  const scrollToBottom = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+      setIsAtBottom(true);
+      setShowScrollButton(false);
+    }
+  };
 
   // Build chat items
   const chatItems = buildChatItems(messages, stream, streamStartedAt, showThinking);
@@ -76,7 +109,7 @@ export default function ChatPage() {
   };
 
   const handleNewSession = () => {
-    resetSession();
+    createNewSession();
   };
 
   const handleOpenSidebar = (content: string) => {
@@ -89,6 +122,17 @@ export default function ChatPage() {
     setSidebarContent(null);
   };
 
+  const handleRemoveFromQueue = (id: string) => {
+    removeFromQueue(id);
+  };
+
+  const handleSessionSwitch = (key: string) => {
+    switchSession(key);
+  };
+
+  // Get sessions list
+  const localSessions = getLocalSessions();
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
@@ -96,9 +140,29 @@ export default function ChatPage() {
         <header className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-card/50 backdrop-blur">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-semibold">Chat</h1>
-            <span className="text-sm text-muted-foreground">Session: {sessionKey}</span>
+            <SessionSelector
+              currentSessionKey={sessionKey}
+              sessions={localSessions}
+              onSessionSwitch={handleSessionSwitch}
+              onNewSession={handleNewSession}
+              loading={false}
+            />
           </div>
           <div className="flex items-center gap-2">
+            {/* Abort button when streaming */}
+            {sending && runId && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleAbort}
+                className="gap-1 animate-pulse"
+                title="Stop the current response"
+              >
+                <Icons.x className="h-4 w-4" />
+                Stop
+              </Button>
+            )}
+
             {/* Connection status */}
             <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
               connected ? "bg-ok/10 text-ok" : "bg-muted/50 text-muted-foreground"
@@ -106,6 +170,18 @@ export default function ChatPage() {
               <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-ok animate-pulse" : ""}`} />
               {connected ? "Connected" : "Disconnected"}
             </div>
+
+            {/* Thinking toggle */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowThinking(!showThinking)}
+              className={`gap-1 ${showThinking ? "bg-accent/10" : ""}`}
+              title={showThinking ? "Hide thinking" : "Show thinking"}
+            >
+              <Icons.brain className="h-4 w-4" />
+              Thinking
+            </Button>
 
             {/* Focus mode toggle */}
             <Button
@@ -124,6 +200,7 @@ export default function ChatPage() {
       {/* Focus mode exit button */}
       {focusMode && (
         <button
+          type="button"
           onClick={handleToggleFocusMode}
           className="absolute top-4 right-4 z-50 p-2 rounded-lg bg-card/50 hover:bg-card border border-border/50"
           aria-label="Exit focus mode"
@@ -135,9 +212,13 @@ export default function ChatPage() {
       {/* Main chat area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Chat thread */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <ScrollArea className="flex-1 px-4">
-            <div ref={scrollRef} className="py-4">
+        <div className="flex-1 flex flex-col min-w-0 relative">
+          <div 
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto px-4"
+            onScroll={handleScroll}
+          >
+            <div className="py-4">
               {!connected && (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
@@ -169,7 +250,23 @@ export default function ChatPage() {
                 <div key={item.key}>{item.content}</div>
               ))}
             </div>
-          </ScrollArea>
+          </div>
+
+          {/* Scroll to bottom button */}
+          {showScrollButton && (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              className="absolute bottom-4 right-8 z-10 p-2.5 rounded-full bg-accent hover:bg-accent/80 border border-border/50 shadow-lg transition-all hover:scale-105"
+              aria-label="Scroll to bottom"
+              title="New messages - scroll to bottom"
+            >
+              <Icons.arrowDown className="h-4 w-4" />
+            </button>
+          )}
+
+          {/* Queue display */}
+          <QueueDisplay queue={queue} onRemove={handleRemoveFromQueue} />
 
           {/* Chat input */}
           <ChatInput

@@ -2,11 +2,16 @@
  * MessageBubble component for displaying a single chat message.
  */
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { stripMarkdown } from "@/lib/utils-markdown";
+import { copyToClipboard, messageToMarkdown } from "@/lib/utils-chat";
 import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
 import { ToolCardComponent } from "./ToolCard";
 import type { ChatMessage, MessageContentItem } from "@/types";
 import { formatDistanceToNow } from "date-fns";
@@ -15,10 +20,13 @@ interface MessageBubbleProps {
   message: ChatMessage;
   isStreaming?: boolean;
   onViewToolDetail?: (content: string) => void;
+  showHeader?: boolean; // Whether to show role header and avatar
 }
 
-export function MessageBubble({ message, isStreaming = false, onViewToolDetail }: MessageBubbleProps) {
+export function MessageBubble({ message, isStreaming = false, onViewToolDetail, showHeader = false }: MessageBubbleProps) {
   const { role, content, timestamp } = message;
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
 
   // Normalize content to array
   const contentItems: MessageContentItem[] = Array.isArray(content)
@@ -78,22 +86,50 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail }
 
   const timeString = formatDistanceToNow(new Date(timestamp), { addSuffix: true });
 
+  const handleCopy = async () => {
+    const markdown = messageToMarkdown(message);
+    const success = await copyToClipboard(markdown);
+
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } else {
+      setCopyError(true);
+      setTimeout(() => setCopyError(false), 2000);
+    }
+  };
+
   return (
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
-      {/* Avatar */}
-      {!isUser && roleInfo.icon && (
+    <div className={`${showHeader ? 'flex gap-3' : ''} ${isUser && showHeader ? "flex-row-reverse" : ""} ${showHeader ? 'group' : ''}`}>
+      {/* Avatar - only show when showHeader is true */}
+      {showHeader && !isUser && roleInfo.icon && (
         <div className={`flex-shrink-0 w-8 h-8 rounded-full ${roleInfo.bgColor} flex items-center justify-center`}>
           <roleInfo.icon className="h-4 w-4 text-muted-foreground" />
         </div>
       )}
 
       {/* Message content */}
-      <div className={`flex flex-col gap-1 max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
-        {/* Role label */}
-        {!isUser && (
+      <div className={`flex flex-col gap-1 ${showHeader ? 'max-w-[80%]' : 'w-full'} ${isUser ? "items-end" : "items-start"}`}>
+        {/* Role label with copy button - only show when showHeader is true */}
+        {showHeader && !isUser && (
           <div className="flex items-center gap-2 px-1">
             <span className="text-xs font-medium text-muted-foreground">{roleInfo.label}</span>
             <span className="text-xs text-muted-foreground/50">{timeString}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 px-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={handleCopy}
+              title={copied ? "Copied!" : copyError ? "Copy failed" : "Copy as markdown"}
+            >
+              {copied ? (
+                <Icons.check className="h-3 w-3 text-ok" />
+              ) : copyError ? (
+                <Icons.x className="h-3 w-3 text-destructive" />
+              ) : (
+                <Icons.copy className="h-3 w-3" />
+              )}
+            </Button>
           </div>
         )}
 
@@ -116,20 +152,40 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail }
                   components={{
                     code: ({ node, inline, className, children, ...props }: any) => {
                       const match = /language-(\w+)/.exec(className || "");
+                      const language = match ? match[1] : "text";
+                      const codeString = String(children).replace(/\n$/, "");
+                      
                       return !inline ? (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
+                        <SyntaxHighlighter
+                          style={oneDark}
+                          language={language}
+                          PreTag="div"
+                          customStyle={{
+                            margin: 0,
+                            borderRadius: "0.5rem",
+                            fontSize: "0.875rem",
+                            lineHeight: "1.5",
+                          }}
+                          codeTagProps={{
+                            style: {
+                              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                            }
+                          }}
+                          showLineNumbers={codeString.split('\n').length > 5}
+                          {...props}
+                        >
+                          {codeString}
+                        </SyntaxHighlighter>
                       ) : (
-                        <code className="px-1 py-0.5 rounded bg-muted text-muted-foreground text-xs" {...props}>
+                        <code className="px-1 py-0.5 rounded bg-muted text-muted-foreground text-xs font-mono" {...props}>
                           {children}
                         </code>
                       );
                     },
                     pre: ({ children }) => (
-                      <pre className="overflow-x-auto p-3 rounded-lg bg-muted/50 border border-border/50">
+                      <div className="my-4 overflow-hidden rounded-lg border border-border/50">
                         {children}
-                      </pre>
+                      </div>
                     ),
                   }}
                 >
