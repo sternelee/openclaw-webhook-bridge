@@ -29,17 +29,6 @@
     "enabled": true,
   },
   /**
-   * Durable Object Migrations
-   * Delete the old WebSocketHub Durable Object class that is no longer used
-   * https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/
-   */
-  "migrations": [
-    {
-      "tag": "v2-delete-websocket-hub",
-      "deleted_classes": ["WebSocketHub"]
-    }
-  ],
-  /**
    * Smart Placement
    * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
    */
