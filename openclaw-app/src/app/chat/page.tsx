@@ -50,14 +50,14 @@ export default function ChatPage() {
   // Load settings and connect on mount
   useEffect(() => {
     const settings = loadSettings();
-    if (settings.gatewayUrl) {
-      connect();
+    const currentState = useAppStore.getState();
+    if (settings.gatewayUrl && !currentState.connected) {
+      currentState.connect();
     }
-    loadChatHistory();
-    
+    currentState.loadChatHistory();
+
     // Cleanup old sessions (keep last 50)
     SessionStorage.cleanupOldSessions(50);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-scroll to bottom when new messages arrive
@@ -65,6 +65,7 @@ export default function ChatPage() {
     if (scrollRef.current && isAtBottom) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, stream, isAtBottom]);
 
   // Handle scroll events to detect if user is at bottom

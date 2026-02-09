@@ -214,8 +214,11 @@ export const useAppStore = create<AppState>()(
 
         // Connection management
         connect: () => {
-          const { gatewayUrl, token, uid, client } = get();
+          const { gatewayUrl, token, uid, client, connected } = get();
           if (!gatewayUrl) return;
+
+          // If already connected, don't reconnect
+          if (connected) return;
 
           // Stop existing client if any
           client?.stop();
