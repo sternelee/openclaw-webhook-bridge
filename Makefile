@@ -1,76 +1,72 @@
-.PHONY: build build-all build-release clean test run fmt vet help
+.PHONY: build build-all build-release clean test run fmt check clippy help
 
 BINARY_NAME=openclaw-bridge
-VERSION?=0.1.0
 BUILD_DIR=dist
-SRC_DIR=cmd/bridge
 
-help: ## 显示帮助信息
-	@echo "可用的命令:"
+help: ## Show this help message
+	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-build: ## 编译当前平台的二进制文件
-	@echo "编译 $(BINARY_NAME)..."
-	go build -o $(BINARY_NAME) ./$(SRC_DIR)/
-	@echo "完成: $(BINARY_NAME)"
+build: ## Build for current platform (debug)
+	@echo "Building $(BINARY_NAME) (debug)..."
+	cargo build
+	@echo "Done: target/debug/$(BINARY_NAME)"
 
-build-all: ## 编译所有平台的二进制文件
-	@echo "编译所有平台..."
-	./scripts/build.sh
+build-release: ## Build for current platform (release)
+	@echo "Building $(BINARY_NAME) (release)..."
+	cargo build --release
+	@echo "Done: target/release/$(BINARY_NAME)"
 
-build-release: ## 编译 release 版本（无日志）
-	@echo "编译 $(BINARY_NAME) (release mode, no logging)..."
-	go build -tags release -o $(BINARY_NAME) ./$(SRC_DIR)/
-	@echo "完成: $(BINARY_NAME) (release)"
+build-all: ## Build for all platforms (requires cross)
+	@echo "Building for all platforms..."
+	./scripts/build-rust.sh
 
-build-all-release: ## 编译所有平台的 release 版本
-	@echo "编译所有平台 (release mode)..."
-	RELEASE=1 ./scripts/build.sh
+build-all-release: ## Build for all platforms (release mode)
+	@echo "Building for all platforms (release)..."
+	RELEASE=1 ./scripts/build-rust.sh
 
-clean: ## 清理构建文件
-	@echo "清理..."
-	rm -f $(BINARY_NAME)
+clean: ## Clean build artifacts
+	@echo "Cleaning..."
+	cargo clean
 	rm -rf $(BUILD_DIR)
-	go clean
-	@echo "清理完成"
+	@echo "Clean complete"
 
-test: ## 运行测试
-	@echo "运行测试..."
-	go test -v ./...
+test: ## Run tests
+	@echo "Running tests..."
+	cargo test --verbose
 
-fmt: ## 格式化代码
-	@echo "格式化代码..."
-	go fmt ./...
-	@echo "格式化完成"
+fmt: ## Format code
+	@echo "Formatting code..."
+	cargo fmt
+	@echo "Format complete"
 
-vet: ## 检查代码
-	@echo "检查代码..."
-	go vet ./...
-	@echo "检查完成"
+check: ## Check code without building
+	@echo "Checking code..."
+	cargo check
+	@echo "Check complete"
 
-lint: fmt vet ## 运行所有代码检查
+clippy: ## Run clippy linter
+	@echo "Running clippy..."
+	cargo clippy -- -D warnings
+	@echo "Clippy complete"
 
-tidy: ## 整理依赖
-	@echo "整理依赖..."
-	go mod tidy
-	@echo "完成"
+lint: fmt clippy ## Run all linters
 
-run: build ## 编译并运行
-	@echo "运行 $(BINARY_NAME)..."
-	./$(BINARY_NAME)
+run: ## Run in development mode
+	@echo "Running $(BINARY_NAME)..."
+	cargo run -- run
 
-install: build ## 安装到 GOPATH/bin
-	@echo "安装 $(BINARY_NAME)..."
-	go install ./$(SRC_DIR)/
-	@echo "已安装到: $$(go env GOPATH)/bin/$(BINARY_NAME)"
+run-release: build-release ## Run release build
+	@echo "Running $(BINARY_NAME) (release)..."
+	./target/release/$(BINARY_NAME) run
 
-dev: ## 开发模式运行（不编译）
-	@echo "开发模式运行..."
-	go run ./$(SRC_DIR)/
+install: build-release ## Install to ~/.cargo/bin
+	@echo "Installing $(BINARY_NAME)..."
+	cargo install --path .
+	@echo "Installed to: ~/.cargo/bin/$(BINARY_NAME)"
 
-deps: ## 下载依赖
-	@echo "下载依赖..."
-	go mod download
-	@echo "完成"
+doc: ## Generate documentation
+	@echo "Generating documentation..."
+	cargo doc --no-deps --open
 
 .DEFAULT_GOAL := help

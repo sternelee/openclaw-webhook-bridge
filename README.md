@@ -1,21 +1,16 @@
 # OpenClaw Bridge
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?flat&logo=go)](https://go.dev/)
 [![Rust Version](https://img.shields.io/badge/Rust-1.70+-orange?flat&logo=rust)](https://www.rust-lang.org/)
 
 连接 WebSocket Webhook 服务与 OpenClaw AI Agent 的桥接服务。
 
-## 🆕 Rust 实现
+## 特点
 
-现在提供 **Rust 版本**实现，具有更好的性能和内存安全性！
-
-- 📁 详细文档: [RUST_README.md](./RUST_README.md)
-- 🚀 特点: 异步 I/O、类型安全、零成本抽象
-- 📦 二进制大小: ~2.7MB (stripped)
-- 🔧 构建: `cargo build --release` 或 `make -f Makefile.rust build-release`
-
-Go 版本（当前稳定版本）和 Rust 版本（新实现）功能对等，可根据需要选择使用。
+-  异步 I/O、类型安全、零成本抽象
+-  二进制大小: ~2.7MB (stripped)
+-  低内存占用: 2-3MB
+-  跨平台支持: Linux, macOS, Windows
 
 ## 前置要求
 
@@ -58,8 +53,10 @@ Invoke-WebRequest -Uri https://github.com/sternelee/openclaw-webhook-bridge/rele
 ```bash
 git clone https://github.com/sternelee/openclaw-webhook-bridge.git
 cd openclaw-webhook-bridge
-go build -o openclaw-bridge ./cmd/bridge/
+cargo build --release
 ```
+
+编译后的二进制文件位于 `target/release/openclaw-bridge`。
 
 ## 使用
 
@@ -199,7 +196,7 @@ tail -f ~/.openclaw/bridge.log
 
 ## 项目架构
 
-OpenClaw Bridge 由三个主要组件构成：
+OpenClaw Bridge 由以下主要组件构成：
 
 ```
 ┌─────────────────┐     WebSocket      ┌──────────────────┐
@@ -207,12 +204,17 @@ OpenClaw Bridge 由三个主要组件构成：
 │ Program (Taro)  │    (ws://...?uid)  │ Workers Webhook  │
 └─────────────────┘                     └────────┬─────────┘
                                                 │
+┌─────────────────┐                           │
+│ Next.js Web App │◄──────────────────────────┘
+│ (OpenNext/CF)   │
+└─────────────────┘
+                                                │
                                                 │ Durable Object
                                                 │ (single global,
                                                 │  routes by UID)
                                                 ▼
                                        ┌──────────────────┐
-                                       │ Go Bridge         │
+                                       │ OpenClaw Bridge  │
                                        │ (connects to     │
                                        │  OpenClaw)       │
                                        └────────┬─────────┘
@@ -229,7 +231,7 @@ OpenClaw Bridge 由三个主要组件构成：
 
 | 组件 | 目录 | 说明 |
 |------|------|------|
-| **Go Bridge** | `cmd/bridge/`, `internal/` | 生产级守护进程，连接 Webhook 和 OpenClaw Gateway |
+| **Bridge** | `src/` | 基于 Rust 的守护进程，连接 Webhook 和 OpenClaw Gateway |
 | **Cloudflare Workers** | `cloudflare-webhook/` | 基于 Durable Objects 的 WebSocket 服务，支持多实例路由 |
 | **Node.js Webhook** | `node-webhook/` | 本地测试用 WebSocket 服务器 |
 | **WeChat Mini-Program** | `openclaw-mapp/` | Taro + React 的微信小程序前端 |
@@ -247,20 +249,36 @@ OpenClaw Bridge 由三个主要组件构成：
 
 ## 开发
 
-### Go Bridge
+### Bridge
 
 ```bash
 # 前台运行（日志直接输出到终端）
-./openclaw-bridge run
+cargo run -- run
+
+# 编译当前平台
+cargo build
+
+# 编译 release 版本
+cargo build --release
 
 # 编译所有平台
-./scripts/build.sh
+./scripts/build-rust.sh
 
 # 代码检查
 make fmt      # 格式化代码
-make vet      # 静态分析
-make lint     # fmt + vet
+make clippy   # 静态分析
+make lint     # fmt + clippy
 make test     # 运行测试
+```
+
+### 日志级别
+
+通过 `RUST_LOG` 环境变量设置日志级别：
+
+```bash
+RUST_LOG=info cargo run -- run    # 默认
+RUST_LOG=debug cargo run -- run   # 详细
+RUST_LOG=warn cargo run -- run    # 安静
 ```
 
 ### Cloudflare Workers Webhook
@@ -311,7 +329,7 @@ OpenClaw 的并发能力基于 **Session**：
 - 一条 Session = 一条独立任务流（独立上下文）
 - 多条 Session = 同时处理多条任务
 
-在 Telegram 里，最简单的“多 Session”入口就是 **Topics**：
+在 Telegram 里，最简单的"多 Session"入口就是 **Topics**：
 - 一个群开启多个 Topic
 - 每个 Topic 对应一条独立 Session
 - 一个群 = 多条并行车道
@@ -327,7 +345,7 @@ OpenClaw 的并发能力基于 **Session**：
 - Chat 的闲聊不影响 Work
 - Feed 的噪音不污染 Chat
 
-#### 让机器人在群里“能看到消息”
+#### 让机器人在群里"能看到消息"
 
 很多问题并不是 `requireMention=false`，而是 bot 根本收不到群消息。建议同时做：
 1. 在 @BotFather 里关闭 Privacy：`/setprivacy → Disable`
@@ -345,13 +363,13 @@ OpenClaw 的并发能力基于 **Session**：
 
 两种常见策略：
 
-**策略 A：全群都不需要 @**  
-适合机器人专用群 / 小群  
+**策略 A：全群都不需要 @**
+适合机器人专用群 / 小群
 设置：`requireMention = false`
 
-**策略 B：只有部分 Topic 不需要 @**  
-群默认需要 @（避免乱插话）  
-例如 Work / Feed 不需要 @（更像“专用任务车道”）
+**策略 B：只有部分 Topic 不需要 @**
+群默认需要 @（避免乱插话）
+例如 Work / Feed 不需要 @（更像"专用任务车道"）
 
 配置示例：
 ```json
@@ -372,19 +390,19 @@ OpenClaw 的并发能力基于 **Session**：
 }
 ```
 
-#### 30 秒验收：你真的“并发多任务”了吗？
+#### 30 秒验收：你真的"并发多任务"了吗？
 
-1. 在 Chat Topic 说一句  
-2. 立刻切到 Work Topic 再说一句  
+1. 在 Chat Topic 说一句
+2. 立刻切到 Work Topic 再说一句
 3. 观察 OpenClaw 是否：
-   - 两边都能收到并回复  
-   - 回复不串到别的 Topic  
+   - 两边都能收到并回复
+   - 回复不串到别的 Topic
    - 两个 Topic 的上下文互不影响
 
 #### 常见坑
 
-1. **群里完全没反应**：先查 BotFather /setprivacy 是否 Disable，再查 bot 是否是管理员  
-2. **私聊正常，群里不正常**：99% 是 privacy/admin/requireMention 组合问题  
+1. **群里完全没反应**：先查 BotFather /setprivacy 是否 Disable，再查 bot 是否是管理员
+2. **私聊正常，群里不正常**：99% 是 privacy/admin/requireMention 组合问题
 3. **回复串台**：Topic ID 配错（或把一个 Topic 当成另一个 Topic）
 
 ### 本地开发
@@ -407,55 +425,6 @@ pnpm dev:weapp
 
 如需重置或升级 Tailwind 配置，请参考：
 - https://docs.taro.zone/en/docs/tailwindcss
-
-## 示例：简单 WebSocket 服务端
-
-```go
-package main
-
-import (
-	"log"
-	"net/http"
-
-	"github.com/gorilla/websocket"
-)
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
-func handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-
-	// 发送测试消息
-	msg := map[string]string{
-		"id":      "msg-1",
-		"content": "你好",
-		"session": "test-session",
-	}
-	conn.WriteJSON(msg)
-
-	// 接收响应
-	for {
-		var resp map[string]interface{}
-		if err := conn.ReadJSON(&resp); err != nil {
-			log.Printf("Read error: %v", err)
-			break
-		}
-		log.Printf("Received: %+v", resp)
-	}
-}
-
-func main() {
-	http.HandleFunc("/ws", handleWebSocket)
-	log.Println("Server started on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-```
 
 ## 贡献
 

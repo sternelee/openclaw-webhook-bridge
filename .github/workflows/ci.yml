@@ -1,4 +1,4 @@
-name: Rust CI
+name: CI
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
       - "src/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - ".github/workflows/rust-ci.yml"
-      - "Makefile.rust"
+      - ".github/workflows/ci.yml"
+      - "Makefile"
       - "scripts/build-rust.sh"
   pull_request:
     branches: [main, develop]
@@ -16,8 +16,8 @@ on:
       - "src/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - ".github/workflows/rust-ci.yml"
-      - "Makefile.rust"
+      - ".github/workflows/ci.yml"
+      - "Makefile"
       - "scripts/build-rust.sh"
 
 jobs:
@@ -163,11 +163,11 @@ jobs:
       - name: Build documentation
         run: |
           cargo doc --no-deps --all-features
-          echo "<meta http-equiv=\"refresh\" content=\"0; url=openclaw_bridge_rust\">" > target/doc/index.html
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=openclaw_bridge\">" > target/doc/index.html
 
       - name: Upload documentation
         uses: actions/upload-artifact@v4
         with:
-          name: rust-docs
+          name: docs
           path: target/doc
           retention-days: 30

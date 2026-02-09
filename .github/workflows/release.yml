@@ -10,24 +10,167 @@ permissions:
 
 jobs:
   build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Linux
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: openclaw-bridge
+            asset_name: openclaw-bridge-linux-amd64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: openclaw-bridge
+            asset_name: openclaw-bridge-linux-arm64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact_name: openclaw-bridge
+            asset_name: openclaw-bridge-linux-amd64-musl
+
+          # macOS
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: openclaw-bridge
+            asset_name: openclaw-bridge-darwin-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: openclaw-bridge
+            asset_name: openclaw-bridge-darwin-arm64
+
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: openclaw-bridge.exe
+            asset_name: openclaw-bridge-windows-amd64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact_name: openclaw-bridge.exe
+            asset_name: openclaw-bridge-windows-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Strip binary (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp ${{ matrix.artifact_name }} ${{ matrix.asset_name }}.exe
+          else
+            cp ${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: target/${{ matrix.target }}/release/${{ matrix.asset_name }}${{ runner.os == 'Windows' && '.exe' || '' }}
+
+  release:
+    name: Create Release
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          go-version: "1.21"
+          path: dist
 
-      - name: Build all platforms (release, no logging)
-        run: bash scripts/build.sh
-        env:
-          VERSION: ${{ github.ref_name }}
-          RELEASE: "1"
+      - name: Display structure of downloaded files
+        run: ls -lah dist
+
+      - name: Create tarball archives
+        run: |
+          cd dist
+          for dir in */; do
+            dir_name="${dir%/}"
+            binary_name=$(basename "$dir_name")
+            if [[ "$binary_name" == *"windows"* ]]; then
+              # Create zip for Windows
+              zip -j "${binary_name}.zip" "${dir_name}/${binary_name}.exe"
+            else
+              # Create tar.gz for Unix-like systems
+              tar -czf "${binary_name}.tar.gz" -C "$dir_name" "$binary_name"
+            fi
+          done
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: dist/*.{tar.gz,zip}
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
+          body: |
+            ## OpenClaw Bridge Release ${{ github.ref_name }}
+
+            ### Installation
+
+            Download the appropriate binary for your platform:
+
+            | Platform | Download |
+            |----------|----------|
+            | Linux AMD64 | `openclaw-bridge-linux-amd64.tar.gz` |
+            | Linux ARM64 | `openclaw-bridge-linux-arm64.tar.gz` |
+            | Linux AMD64 (musl) | `openclaw-bridge-linux-amd64-musl.tar.gz` |
+            | macOS AMD64 (Intel) | `openclaw-bridge-darwin-amd64.tar.gz` |
+            | macOS ARM64 (Apple Silicon) | `openclaw-bridge-darwin-arm64.tar.gz` |
+            | Windows AMD64 | `openclaw-bridge-windows-amd64.zip` |
+            | Windows ARM64 | `openclaw-bridge-windows-arm64.zip` |
+
+            ### Quick Start
+
+            1. Extract the archive:
+               ```bash
+               tar -xzf openclaw-bridge-linux-amd64.tar.gz
+               ```
+
+            2. Run the bridge:
+               ```bash
+               ./openclaw-bridge run
+               ```
+
+            ### Daemon Mode
+
+            ```bash
+            # Start as daemon
+            ./openclaw-bridge start
+
+            # Check status
+            ./openclaw-bridge status
+
+            # Stop
+            ./openclaw-bridge stop
+            ```
+
+            ### Configuration
+
+            The bridge uses the following configuration files:
+            - `~/.openclaw/openclaw.json` - OpenClaw Gateway settings
+            - `~/.openclaw/bridge.json` - Bridge settings
+            - `~/.openclaw/sessions.json` - Session store (auto-created)
+
+            See [README.md](../README.md) for full documentation.

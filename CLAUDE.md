@@ -6,13 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenClaw is an AI assistant system with multiple implementations and components:
 
-1. **Go Bridge** (`cmd/bridge/main.go`) - Production daemon connecting webhook to OpenClaw Gateway (mature, production-ready)
-2. **Rust Bridge** (`src/main.rs`) - Alternative implementation with better performance and memory safety (feature-complete, ~73% smaller binary)
-3. **Cloudflare Workers Webhook** (`cloudflare-webhook/`) - Durable Object-based WebSocket service with Hono
-4. **WeChat Mini-Program** (`openclaw-mapp/`) - Taro-based React client for chatting with OpenClaw
-5. **Next.js Web App** (`openclaw-app/`) - Web client using OpenNext for Cloudflare deployment
+1. **OpenClaw Bridge** (`src/main.rs`) - Production daemon connecting webhook to OpenClaw Gateway (Rust implementation with async I/O and excellent performance)
+2. **Cloudflare Workers Webhook** (`cloudflare-webhook/`) - Durable Object-based WebSocket service with Hono
+3. **WeChat Mini-Program** (`openclaw-mapp/`) - Taro-based React client for chatting with OpenClaw
+4. **Next.js Web App** (`openclaw-app/`) - Web client using OpenNext for Cloudflare deployment
 
-Both Go and Rust implementations are production-ready and use identical configuration files. Choose Rust for better performance/smaller footprint, or Go for ecosystem familiarity.
+The Bridge is implemented in Rust for better performance, memory safety, and smaller binary size (~2.7MB).
 
 ### System Architecture
 
@@ -32,7 +31,7 @@ Both Go and Rust implementations are production-ready and use identical configur
                                                │  routes by UID)
                                                ▼
                                       ┌──────────────────┐
-                                      │ Go Bridge         │
+                                      │ OpenClaw Bridge  │
                                       │ (connects to     │
                                       │  OpenClaw)       │
                                       └────────┬─────────┘
@@ -45,91 +44,63 @@ Both Go and Rust implementations are production-ready and use identical configur
                                       └──────────────────┘
 ```
 
-## Bridge Implementation Choice
+## Bridge Architecture
 
-This project offers **two fully-functional bridge implementations**:
+The Bridge consists of five main components:
 
-| Aspect | Go Version | Rust Version |
-|--------|-----------|--------------|
-| Binary Size | ~10MB | ~2.7MB (73% smaller) |
-| Startup Memory | 8-10MB | 2-3MB |
-| Maturity | Production-proven | Feature-complete, newer |
-| Build | `make build` | `make -f Makefile.rust build-release` |
-| Config | Same `~/.openclaw/*.json` | Same `~/.openclaw/*.json` |
+1. **Webhook Client** (`src/webhook/mod.rs`) - WebSocket client for the webhook server. Appends `uid` query parameter for instance identification. Handles incoming JSON messages and forwards OpenClaw responses back.
 
-Both use identical configuration - switch anytime without changes.
-
-## Component 1: Go Bridge
-
-The Go bridge is a production daemon that connects the webhook service to the OpenClaw AI Agent Gateway.
-
-### Go Bridge Architecture
-
-The bridge consists of five main components:
-
-1. **Webhook Client** (`internal/webhook/client.go`) - WebSocket client for the webhook server. Appends `uid` query parameter for instance identification. Handles incoming JSON messages and forwards OpenClaw responses back.
-
-2. **OpenClaw Client** (`internal/openclaw/client.go`) - WebSocket client for OpenClaw Gateway (localhost). Implements the gateway protocol handshake:
+2. **OpenClaw Client** (`src/openclaw/mod.rs`) - WebSocket client for OpenClaw Gateway (localhost). Implements the gateway protocol handshake:
    - Sends `connect` request with auth token, protocol version (3), and operator scopes
    - Sends `agent` requests with message, agentId, sessionKey, and idempotency key
    - Receives streaming events: `assistant`, `thought`, `tool_call`, `tool_result`, `lifecycle`
 
-3. **Bridge Core** (`internal/bridge/bridge.go`) - Central routing logic that:
+3. **Bridge Core** (`src/bridge/mod.rs`) - Central routing logic that:
    - Parses webhook messages for `id`, `content`, and optional `session`
    - Filters control messages (type=`connected`, `error`, `event`)
    - Generates session key as `webhook:{messageID}` when session not provided
    - Forwards user content to OpenClaw as agent requests
    - Forwards OpenClaw events back to webhook as raw JSON
 
-4. **Config Loader** (`internal/config/config.go`) - Configuration from `~/.openclaw/`:
+4. **Config Loader** (`src/config/mod.rs`) - Configuration from `~/.openclaw/`:
    - `openclaw.json` - Gateway port (default 18789) and auth token
    - `bridge.json` - Webhook URL, agent ID (default "main"), and optional UID
    - `sessions.json` - Session store (auto-created)
 
-5. **Session Store** (`internal/sessions/`) - File-based session persistence:
-   - `types.go` - SessionEntry, DeliveryContext, SessionScope
-   - `store.go` - File persistence with in-memory cache (45s TTL) and file locking
-   - `session_key.go` - Session key derivation (per-sender vs global)
+5. **Session Store** (`src/sessions/mod.rs`) - File-based session persistence:
+   - Types: SessionEntry, DeliveryContext, SessionScope
+   - File persistence with in-memory cache (45s TTL) and file locking
+   - Session key derivation (per-sender vs global)
    - Reset triggers: `/new`, `/reset` commands create fresh sessions
 
 The UID is mandatory for routing - auto-generated UUID v4 if not provided.
 
-### Rust Bridge
-
-The Rust implementation (`src/`) provides the same functionality with performance benefits:
-
-- **Architecture**: Async I/O with Tokio runtime, channel-based message passing
-- **Modules**: `src/{bridge,commands,config,openclaw,sessions,webhook}/mod.rs`
-- **Binary**: `openclaw-bridge-rust` (2.7MB vs Go's 10MB)
-
-#### Rust Build Commands
+### Build Commands
 
 ```bash
 # Debug build
 cargo build
-# or
-make -f Makefile.rust build
 
 # Release build (optimized, stripped)
 cargo build --release
 # or
-make -f Makefile.rust build-release
+make build-release
 
 # Run in foreground
 cargo run -- run
 # or
-make -f Makefile.rust run
+make run
 
 # Cross-platform builds (requires cross)
-make -f Makefile.rust build-all-release
+make build-all-release
 
 # Linting
-make -f Makefile.rust fmt      # cargo fmt
-make -f Makefile.rust clippy   # cargo clippy
-make -f Makefile.rust lint     # fmt + clippy
+make fmt      # cargo fmt
+make clippy   # cargo clippy
+make lint     # fmt + clippy
 
 # Testing
-make -f Makefile.rust test     # cargo test
+make test     # cargo test
 
 # Single test
 cargo test test_session_key
@@ -141,59 +112,13 @@ cd src/sessions && cargo test
 cargo test -- --nocapture
 ```
 
-#### Rust Logging
+### Logging
 
 Set log level via `RUST_LOG` environment variable:
 ```bash
 RUST_LOG=info cargo run -- run    # Default
 RUST_LOG=debug cargo run -- run   # Verbose
 RUST_LOG=warn cargo run -- run    # Quiet
-```
-
-See `RUST_README.md` and `GO_VS_RUST.md` for detailed comparison.
-
-### Go Bridge Build Commands
-
-```bash
-# Build current platform
-make build
-# or
-go build -o openclaw-bridge ./cmd/bridge/
-
-# Build all platforms (Linux, macOS, Windows)
-make build-all
-# or
-./scripts/build.sh
-
-# Run in dev mode (foreground)
-make dev
-# or
-go run ./cmd/bridge/
-
-# Run as daemon
-./openclaw-bridge start webhook_url=ws://localhost:8080/ws
-./openclaw-bridge status
-./openclaw-bridge stop
-./openclaw-bridge restart
-
-# Tests
-make test                 # Run all tests
-go test -v ./...         # Verbose output
-
-# Single package test
-go test -v ./internal/webhook/
-
-# Specific test
-go test -v -run TestConnectionLoop ./internal/webhook/
-
-# With coverage
-go test -cover ./...
-
-# Code quality
-make fmt      # go fmt ./...
-make vet      # go vet ./...
-make lint     # fmt + vet
-make tidy     # go mod tidy
 ```
 
 ## Component 2: Cloudflare Workers Webhook
@@ -280,18 +205,12 @@ pnpm install
 
 # Development build with watch mode
 pnpm dev:weapp
-# or
-npm run dev:weapp
 
 # Production build
 pnpm build:weapp
-# or
-npm run build:weapp
 
 # Type check (no emit)
 pnpm typescript
-# or
-npm run typescript
 ```
 
 ### Mini-Program Configuration
@@ -341,8 +260,6 @@ pnpm install
 
 # Development server (localhost:3000)
 pnpm dev
-# or
-next dev
 
 # Production build
 pnpm build
@@ -352,13 +269,9 @@ pnpm start
 
 # Deploy to Cloudflare via OpenNext
 pnpm deploy
-# or
-opennextjs-cloudflare build && opennextjs-cloudflare deploy
 
 # Preview locally on Cloudflare runtime
 pnpm preview
-# or
-opennextjs-cloudflare build && opennextjs-cloudflare preview
 ```
 
 ### Web App Configuration
@@ -383,7 +296,7 @@ npm install
 npm start
 ```
 
-Then connect the Go bridge to `ws://localhost:8787/ws`. A test page is available at `http://localhost:8787`.
+Then connect the bridge to `ws://localhost:8787/ws`. A test page is available at `http://localhost:8787`.
 
 ### Full System Startup Sequence
 
@@ -395,7 +308,7 @@ Then connect the Go bridge to `ws://localhost:8787/ws`. A test page is available
    pnpm deploy
    ```
 
-3. **Start Go Bridge**:
+3. **Start Bridge**:
    ```bash
    ./openclaw-bridge start webhook_url=wss://your-worker.workers.dev/ws
    ```
@@ -448,7 +361,7 @@ This design allows multiple bridges and multiple clients to connect to the same 
 
 - **Session reset triggers**: Messages matching `/new` or `/reset` trigger session reset (fresh conversation context). The session preserves its delivery context but starts with a new `sessionId`.
 
-- **Command handling**: The bridge supports slash commands (`/help`, `/commands`, `/skill`, `/approve`) that are intercepted and handled locally or forwarded to OpenClaw Gateway. Commands are detected by leading `/` and parsed by `internal/commands/handler.go`.
+- **Command handling**: The bridge supports slash commands (`/help`, `/commands`, `/skill`, `/approve`) that are intercepted and handled locally or forwarded to OpenClaw Gateway. Commands are detected by leading `/` and parsed by `src/commands/mod.rs`.
 
 - **Control message filtering**: The bridge ignores webhook control payloads with `type` values like `connected`, `error`, or `event`. These are internal WebSocket protocol messages, not user content.
 
@@ -459,18 +372,7 @@ This design allows multiple bridges and multiple clients to connect to the same 
 ## File Structure Reference
 
 ```
-openclaw-webhook-bridge/
-├── cmd/bridge/              # Go bridge entry point
-│   ├── main.go              # CLI and daemon management
-│   ├── daemon_unix.go       # Unix daemon implementation
-│   └── daemon_windows.go    # Windows daemon implementation
-├── internal/                # Go internal packages
-│   ├── bridge/              # Core routing logic
-│   ├── commands/            # Slash command handling
-│   ├── config/              # Configuration loader
-│   ├── openclaw/            # OpenClaw Gateway client
-│   ├── sessions/            # Session persistence
-│   └── webhook/             # Webhook server client
+openclaw-run/
 ├── src/                     # Rust implementation
 │   ├── main.rs              # CLI entry point
 │   ├── bridge/              # Core routing logic
@@ -506,30 +408,15 @@ openclaw-webhook-bridge/
 │   ├── open-next.config.ts  # OpenNext configuration
 │   ├── next.config.ts       # Next.js configuration
 │   └── package.json
-├── Makefile                 # Go build commands
-├── Makefile.rust            # Rust build commands
+├── Makefile                 # Build commands
 ├── Cargo.toml               # Rust project manifest
-├── go.mod, go.sum           # Go dependencies
 ├── CLAUDE.md                # This file - AI agent guidance
 ├── AGENTS.md                # Additional AI agent guidelines
 ├── COMMANDS.md              # Slash commands feature documentation
-├── GO_VS_RUST.md            # Go vs Rust comparison
-├── IMPLEMENTATION_SUMMARY.md # Rust implementation summary
 ├── RUST_README.md           # Rust implementation guide
 ├── SESSION_CONTROL.md       # Session control protocol documentation
 └── README.md                # User-facing documentation
 ```
-
-## Platform-Specific Code
-
-The Go bridge uses platform-specific files for daemonization:
-
-- `cmd/bridge/daemon_unix.go` - Unix daemon (sets `Setpgid: true` on process attributes)
-- `cmd/bridge/daemon_windows.go` - Windows daemon (no special flags needed)
-
-When adding daemon-related changes, ensure both platforms are handled.
-
-**Note**: The Rust implementation does not yet have full daemon mode implemented (marked as future work in `RUST_README.md`).
 
 ## Slash Commands
 
@@ -540,7 +427,7 @@ The bridge supports local slash commands that are intercepted before forwarding 
 - `/skill [name]` - List or run skills
 - `/approve [id] [yes|no]` - Approve/deny pending requests
 
-Commands are detected by the leading `/` and handled by `internal/commands/handler.go` (Go) or `src/commands/mod.rs` (Rust). See `COMMANDS.md` for full protocol details.
+Commands are detected by the leading `/` and handled by `src/commands/mod.rs`. See `COMMANDS.md` for full protocol details.
 
 ## WebSocket Protocol Details
 

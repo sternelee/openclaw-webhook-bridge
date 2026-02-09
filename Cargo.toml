@@ -1,13 +1,13 @@
 [package]
-name = "openclaw-bridge-rust"
-version = "0.1.0"
+name = "openclaw-bridge"
+version = "0.2.1"
 edition = "2021"
 authors = ["OpenClaw Contributors"]
 description = "Bridge between WebSocket webhooks and OpenClaw AI Gateway"
 license = "MIT"
 
 [[bin]]
-name = "openclaw-bridge-rust"
+name = "openclaw-bridge"
 path = "src/main.rs"
 
 [dependencies]
