@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
-tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.23", features = ["rustls"] }
 futures-util = "0.3"
 
 # Serialization
