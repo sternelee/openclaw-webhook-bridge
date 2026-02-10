@@ -33,11 +33,26 @@ export interface WebhookMessage {
 }
 
 /** Bridge response format */
-export interface BridgeResponse {
-  type: "progress" | "complete" | "error";
-  content: string;
+export interface BridgeResponseBase {
   session?: string;
 }
+
+export interface BridgeProgressResponse extends BridgeResponseBase {
+  type: "progress";
+  content: string;
+}
+
+export interface BridgeCompleteResponse extends BridgeResponseBase {
+  type: "complete";
+  content: string;
+}
+
+export interface BridgeErrorResponse extends BridgeResponseBase {
+  type: "error";
+  content: string; // Error message
+}
+
+export type BridgeResponse = BridgeProgressResponse | BridgeCompleteResponse | BridgeErrorResponse;
 
 export class GatewayClient {
   private ws: WebSocket | null = null;

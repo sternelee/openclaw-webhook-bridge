@@ -322,6 +322,19 @@ export const useAppStore = create<AppState>()(
                     sending: false,
                     lastError: payload.error || 'Run aborted',
                   });
+                } else if (evt.event === 'agent') {
+                  // Agent lifecycle events
+                  const payload = evt.payload as any;
+                  if (payload.stream === 'lifecycle' && payload.data?.phase === 'error') {
+                    // Error phase in lifecycle
+                    const errorMsg = payload.data.error || 'An error occurred';
+                    console.error('[Gateway] Agent error:', errorMsg);
+                    set({
+                      stream: null,
+                      sending: false,
+                      lastError: errorMsg,
+                    });
+                  }
                 } else if (evt.event === 'presence' || evt.event === 'health') {
                   // Presence/health events
                   // Update state version tracking
