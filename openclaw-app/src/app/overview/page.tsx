@@ -4,7 +4,6 @@
 
 "use client";
 
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/use-app-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +18,7 @@ export default function OverviewPage() {
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-card/50 backdrop-blur">
+      <header className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-border/50 bg-card/50 backdrop-blur">
         <div>
           <h1 className="text-xl font-semibold">Overview</h1>
           <p className="text-sm text-muted-foreground">
@@ -30,7 +29,7 @@ export default function OverviewPage() {
 
       {/* Main content */}
       <ScrollArea className="flex-1">
-        <div className="p-6 max-w-4xl">
+        <div className="p-4 md:p-6 max-w-4xl">
           {!connected ? (
             <Card>
               <CardContent className="flex items-center justify-center py-12">
@@ -57,7 +56,7 @@ export default function OverviewPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <dl className="grid grid-cols-2 gap-4">
+                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <dt className="text-sm text-muted-foreground">Status</dt>
                       <dd className="text-sm font-medium text-ok">Connected</dd>
@@ -80,7 +79,10 @@ export default function OverviewPage() {
 
               {/* Quick Links */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="cursor-pointer hover:bg-card/80 transition-colors" onClick={() => router.push("/chat")}>
+                <Card
+                  className="cursor-pointer hover:bg-card/80 transition-colors touch-target"
+                  onClick={() => router.push("/chat")}
+                >
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Icons.messageSquare className="h-4 w-4" />
@@ -94,7 +96,10 @@ export default function OverviewPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="cursor-pointer hover:bg-card/80 transition-colors" onClick={() => router.push("/sessions")}>
+                <Card
+                  className="cursor-pointer hover:bg-card/80 transition-colors touch-target"
+                  onClick={() => router.push("/sessions")}
+                >
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Icons.fileText className="h-4 w-4" />
@@ -108,7 +113,10 @@ export default function OverviewPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="cursor-pointer hover:bg-card/80 transition-colors" onClick={() => router.push("/config")}>
+                <Card
+                  className="cursor-pointer hover:bg-card/80 transition-colors touch-target"
+                  onClick={() => router.push("/config")}
+                >
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Icons.settings className="h-4 w-4" />
@@ -122,7 +130,10 @@ export default function OverviewPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="cursor-pointer hover:bg-card/80 transition-colors" onClick={() => router.push("/logs")}>
+                <Card
+                  className="cursor-pointer hover:bg-card/80 transition-colors touch-target"
+                  onClick={() => router.push("/logs")}
+                >
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Icons.scrollText className="h-4 w-4" />

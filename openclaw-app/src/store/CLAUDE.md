@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #1057 | 10:13 AM | 🟣 | Integrated GatewayProvider into app root layout with viewport configuration | ~144 |
+| #1085 | 12:05 PM | 🔴 | Fixed WebSocket connection state not resetting on close | ~215 |
 </claude-mem-context>

@@ -8,4 +8,12 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #957 | 8:45 PM | 🟣 | Mobile-responsive navigation implemented for chat interface | ~218 |
+
+### Feb 10, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #1092 | 12:14 PM | 🔴 | Fixed Next.js 16 compatibility issues and mobile header visibility | ~89 |
+| #1091 | " | 🟣 | Implemented comprehensive mobile-responsive UI and multiple pages | ~226 |
+| #1082 | 12:04 PM | 🔵 | Investigating duplicate WebSocket connection issue in openclaw-app | ~214 |
 </claude-mem-context>

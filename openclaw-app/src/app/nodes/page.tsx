@@ -4,39 +4,40 @@
 
 "use client";
 
-import { useRouter } from "next/navigation";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Icons } from "@/components/ui/icons";
+import { AppShell } from "@/components/layout/AppShell";
+import { ExecApprovals, NodeBindings, DevicesList, NodesList } from "@/components/nodes";
 
 export default function NodesPage() {
-  const router = useRouter();
-
   return (
-    <div className="flex flex-col h-screen bg-background">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-card/50">
-        <div>
-          <h1 className="text-xl font-semibold">Nodes</h1>
-          <p className="text-sm text-muted-foreground">
-            Paired devices, capabilities, and command exposure.
-          </p>
-        </div>
-      </header>
-
-      <div className="flex-1 flex items-center justify-center p-6">
-        <Card className="max-w-md text-center">
-          <CardContent className="pt-6">
-            <Icons.monitor className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium mb-2">Coming Soon</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Node management will be available soon.
+    <AppShell>
+      <div className="flex flex-col h-full">
+        {/* Page Header */}
+        <header className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-border/50 bg-card/50">
+          <div>
+            <h1 className="text-xl font-semibold">Nodes</h1>
+            <p className="text-sm text-muted-foreground">
+              Paired devices, capabilities, and command exposure.
             </p>
-            <Button variant="outline" onClick={() => router.push("/chat")}>
-              Back to Chat
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto p-4 md:p-6 lg:p-8 space-y-6">
+            {/* Exec Approvals Section */}
+            <ExecApprovals />
+
+            {/* Node Bindings Section */}
+            <NodeBindings />
+
+            {/* Devices Section */}
+            <DevicesList />
+
+            {/* Nodes List Section */}
+            <NodesList />
+          </div>
+        </div>
       </div>
-    </div>
+    </AppShell>
   );
 }
