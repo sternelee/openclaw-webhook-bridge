@@ -8,7 +8,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/use-app-store";
-import { MessageGroup, groupMessages, ChatInput, StreamingMessage, ReadingIndicator, QueueDisplay, SessionSelector } from "@/components/chat";
+import {
+  MessageGroup,
+  groupMessages,
+  ChatInput,
+  StreamingMessage,
+  ReadingIndicator,
+  QueueDisplay,
+  SessionSelector,
+} from "@/components/chat";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Icons } from "@/components/ui/icons";
@@ -74,7 +82,8 @@ export default function ChatPage() {
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     const threshold = 100; // pixels from bottom
-    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
+    const isNearBottom =
+      target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
     setIsAtBottom(isNearBottom);
     setShowScrollButton(!isNearBottom);
   };
@@ -83,7 +92,7 @@ export default function ChatPage() {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
-        behavior: 'smooth'
+        behavior: "smooth",
       });
       setIsAtBottom(true);
       setShowScrollButton(false);
@@ -91,7 +100,12 @@ export default function ChatPage() {
   };
 
   // Build chat items
-  const chatItems = buildChatItems(messages, stream, streamStartedAt, showThinking);
+  const chatItems = buildChatItems(
+    messages,
+    stream,
+    streamStartedAt,
+    showThinking,
+  );
 
   const handleSend = (content: string) => {
     sendMessage(content);
@@ -155,20 +169,24 @@ export default function ChatPage() {
       {/* Header - responsive with mobile menu */}
       {!focusMode && (
         <>
-          <div className="md:hidden">
+          {/* Mobile navigation - hidden on desktop */}
+          <div className="hidden">
             <MobileNavigation />
           </div>
-          <MobileHeader
-            connected={connected}
-            sending={sending}
-            runId={runId}
-            showThinking={showThinking}
-            onToggleThinking={() => setShowThinking(!showThinking)}
-            onToggleFocusMode={handleToggleFocusMode}
-            onAbort={handleAbort}
-            leadingContent={headerLeadingContent}
-          />
-          {/* Desktop header */}
+          {/* Mobile header - hidden on desktop */}
+          <div className="md:hidden">
+            <MobileHeader
+              connected={connected}
+              sending={sending}
+              runId={runId}
+              showThinking={showThinking}
+              onToggleThinking={() => setShowThinking(!showThinking)}
+              onToggleFocusMode={handleToggleFocusMode}
+              onAbort={handleAbort}
+              leadingContent={headerLeadingContent}
+            />
+          </div>
+          {/* Desktop header - hidden on mobile */}
           <header className="hidden md:flex items-center justify-between px-4 py-3 border-b border-border/50 bg-card/50 backdrop-blur">
             <div className="flex items-center gap-3">
               {headerLeadingContent}
@@ -189,10 +207,16 @@ export default function ChatPage() {
               )}
 
               {/* Connection status */}
-              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
-                connected ? "bg-ok/10 text-ok" : "bg-muted/50 text-muted-foreground"
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-ok animate-pulse" : ""}`} />
+              <div
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
+                  connected
+                    ? "bg-ok/10 text-ok"
+                    : "bg-muted/50 text-muted-foreground"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-ok animate-pulse" : ""}`}
+                />
                 {connected ? "Connected" : "Disconnected"}
               </div>
 
@@ -253,7 +277,10 @@ export default function ChatPage() {
                     <p className="text-sm text-muted-foreground mb-4">
                       Configure your gateway connection to start chatting.
                     </p>
-                    <Button variant="default" onClick={() => router.push("/config")}>
+                    <Button
+                      variant="default"
+                      onClick={() => router.push("/config")}
+                    >
                       Go to Settings
                     </Button>
                   </div>
@@ -264,7 +291,9 @@ export default function ChatPage() {
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center px-4">
                     <Icons.messageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <h3 className="text-lg font-medium mb-2">Start a conversation</h3>
+                    <h3 className="text-lg font-medium mb-2">
+                      Start a conversation
+                    </h3>
                     <p className="text-sm text-muted-foreground">
                       Send a message to begin chatting with OpenClaw.
                     </p>
@@ -318,10 +347,14 @@ export default function ChatPage() {
               <ScrollArea className="flex-1 p-4">
                 {sidebarContent ? (
                   <div className="prose prose-invert prose-sm max-w-none dark:prose-invert">
-                    <pre className="whitespace-pre-wrap text-sm">{sidebarContent}</pre>
+                    <pre className="whitespace-pre-wrap text-sm">
+                      {sidebarContent}
+                    </pre>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Select an item to view details.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Select an item to view details.
+                  </p>
                 )}
               </ScrollArea>
             </aside>
@@ -352,7 +385,8 @@ function buildChatItems(
       content: (
         <div className="text-center py-2">
           <span className="text-xs text-muted-foreground">
-            Showing last {CHAT_HISTORY_RENDER_LIMIT} messages ({historyStart} hidden)
+            Showing last {CHAT_HISTORY_RENDER_LIMIT} messages ({historyStart}{" "}
+            hidden)
           </span>
         </div>
       ),
@@ -383,7 +417,12 @@ function buildChatItems(
     if (stream.trim().length > 0) {
       items.push({
         key,
-        content: <StreamingMessage text={stream} startedAt={streamStartedAt || Date.now()} />,
+        content: (
+          <StreamingMessage
+            text={stream}
+            startedAt={streamStartedAt || Date.now()}
+          />
+        ),
       });
     } else {
       items.push({

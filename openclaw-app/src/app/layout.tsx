@@ -1,24 +1,25 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "OpenClaw Web UI",
   description: "Web interface for OpenClaw AI Gateway",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#12141a" },
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-  ],
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "OpenClaw",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#12141a" },
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+  ],
 };
 
 export default function RootLayout({
@@ -38,7 +39,9 @@ export default function RootLayout({
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="antialiased" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>{children}</body>
+      <body className="antialiased" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        {children}
+      </body>
     </html>
   );
 }
