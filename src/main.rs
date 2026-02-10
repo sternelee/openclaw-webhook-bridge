@@ -154,13 +154,29 @@ async fn cmd_run(webhook_url: Option<String>, uid: Option<String>) -> Result<()>
         .format_timestamp_millis()
         .init();
 
-    // Handle interactive input if not provided
-    let webhook_url = load_or_prompt_webhook_url(webhook_url)?;
-    let uid = load_or_prompt_uid(uid)?;
-
-    // Save config if prompted
-    config::save_webhook_url(&webhook_url)?;
-    config::save_uid(&uid)?;
+    // Use existing config directly, or use command line args, or load defaults
+    // For `run` command, don't prompt - just use what's available
+    let (webhook_url, uid) = if webhook_url.is_some() || uid.is_some() {
+        // Command line args provided, use them and save config
+        let url = load_or_prompt_webhook_url(webhook_url)?;
+        let id = load_or_prompt_uid(uid)?;
+        config::save_webhook_url(&url)?;
+        config::save_uid(&id)?;
+        (url, id)
+    } else {
+        // No command line args, try to load from config
+        match config::load() {
+            Ok(cfg) => (cfg.webhook_url, cfg.uid),
+            Err(_) => {
+                // Config doesn't exist, prompt user
+                let url = load_or_prompt_webhook_url(None)?;
+                let id = load_or_prompt_uid(None)?;
+                config::save_webhook_url(&url)?;
+                config::save_uid(&id)?;
+                (url, id)
+            }
+        }
+    };
 
     // Show UID and QR code
     display_uid_and_qrcode(&uid, &webhook_url);

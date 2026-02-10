@@ -147,9 +147,23 @@ impl Client {
         // Append UID to URL
         let ws_url = Self::append_uid_to_url(url, uid)?;
 
+        log::debug!("[Webhook] Original URL: {}, UID: {}", url, uid);
+        log::debug!("[Webhook] Parsed WebSocket URL: {}", ws_url);
         info!("[Webhook] Connecting to {} (UID: {})", ws_url, uid);
 
-        let (ws_stream, _) = connect_async(&ws_url).await.context("Failed to connect")?;
+        let (ws_stream, response) = connect_async(&ws_url)
+            .await
+            .with_context(|| format!("Failed to connect to webhook server: {}. Possible causes: server down, DNS resolution failed, TLS handshake failed, or network unreachable", ws_url))?;
+
+        // Log response details for debugging
+        log::debug!(
+            "[Webhook] WebSocket handshake response status: {}",
+            response.status()
+        );
+        log::debug!(
+            "[Webhook] WebSocket handshake response headers: {:?}",
+            response.headers()
+        );
 
         let (mut write, mut read) = ws_stream.split();
 
