@@ -2,17 +2,68 @@
 @use "tailwindcss/components" as *;
 @use "tailwindcss/utilities" as *;
 
+/* OpenClaw Design Tokens - Aligned with openclaw-app */
 @layer base {
   page {
     font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-      "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+      "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+      "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
       sans-serif;
     font-size: 24rpx;
     line-height: 1.5;
-    color: #333;
-    background-color: #f5f5f5;
+    /* Dark theme colors */
+    color: #e4e4e7;
+    background-color: #12141a;
   }
+}
+
+/* CSS Custom Properties for OpenClaw theme */
+:root {
+  /* Background */
+  --oc-bg: #12141a;
+  --oc-bg-elevated: #1a1d25;
+  --oc-bg-muted: #262a35;
+  --oc-bg-hover: #262a35;
+
+  /* Card / Surface */
+  --oc-card: #181b22;
+  --oc-card-foreground: #f4f4f5;
+  --oc-popover: #181b22;
+
+  /* Text */
+  --oc-text: #e4e4e7;
+  --oc-text-strong: #fafafa;
+  --oc-muted: #71717a;
+  --oc-muted-foreground: #71717a;
+
+  /* Border */
+  --oc-border: #27272a;
+  --oc-border-strong: #3f3f46;
+  --oc-border-hover: #52525b;
+  --oc-input: #27272a;
+
+  /* Accent - Signature red */
+  --oc-accent: #ff5c5c;
+  --oc-accent-hover: #ff7070;
+  --oc-accent-muted: rgba(255, 92, 92, 0.75);
+  --oc-accent-subtle: rgba(255, 92, 92, 0.15);
+  --oc-accent-foreground: #fafafa;
+
+  /* Secondary */
+  --oc-secondary: #1e2028;
+  --oc-secondary-foreground: #f4f4f5;
+
+  /* Accent 2 - Teal */
+  --oc-accent2: #14b8a6;
+  --oc-accent2-muted: rgba(20, 184, 166, 0.7);
+
+  /* Semantic colors */
+  --oc-ok: #22c55e;
+  --oc-ok-subtle: rgba(34, 197, 94, 0.12);
+  --oc-danger: #ef4444;
+  --oc-danger-subtle: rgba(239, 68, 68, 0.12);
+  --oc-warn: #f59e0b;
+  --oc-info: #3b82f6;
 }
 
 @layer utilities {
@@ -20,7 +71,7 @@
     width: 6px;
     height: 6px;
     border-radius: 9999px;
-    background: #8696a0;
+    background: var(--oc-muted);
   }
 
   .tw-bounce-1 {
@@ -40,7 +91,7 @@
   }
 
   .tw-placeholder {
-    color: #8696a0;
+    color: var(--oc-muted);
   }
 
   /* Hide scrollbar for Chrome, Safari and Opera */
@@ -52,6 +103,43 @@
   .no-scrollbar {
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
+  }
+
+  /* OpenClaw theme utilities */
+  .oc-bg {
+    background-color: var(--oc-bg);
+  }
+
+  .oc-bg-elevated {
+    background-color: var(--oc-bg-elevated);
+  }
+
+  .oc-bg-card {
+    background-color: var(--oc-card);
+  }
+
+  .oc-bg-accent {
+    background-color: var(--oc-accent);
+  }
+
+  .oc-text {
+    color: var(--oc-text);
+  }
+
+  .oc-text-strong {
+    color: var(--oc-text-strong);
+  }
+
+  .oc-text-muted {
+    color: var(--oc-muted);
+  }
+
+  .oc-text-accent {
+    color: var(--oc-accent);
+  }
+
+  .oc-border {
+    border-color: var(--oc-border);
   }
 }
 
@@ -79,15 +167,17 @@
   }
 }
 
-/* Frosted glass effect for header and input areas */
+/* Frosted glass effect for header and input areas - dark theme */
 .header-frosted {
-  background: rgba(240, 242, 245, 0.5);
+  background: rgba(18, 20, 26, 0.85);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--oc-border);
 }
 
 .input-frosted {
-  background: rgba(240, 242, 245, 0.5);
+  background: rgba(18, 20, 26, 0.9);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid var(--oc-border);
 }

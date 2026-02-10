@@ -37,29 +37,29 @@ class MessageBubble extends Component<MessageBubbleProps> {
       });
     };
 
-    // Get message type display info
+    // Get message type display info - dark theme colors
     const getMessageTypeInfo = () => {
       switch (messageType) {
         case "tool_call":
           return {
             icon: "🔧",
             label: `调用工具: ${message.toolName || "未知"}`,
-            bgColor: "bg-[#F0F9FF]",
-            borderColor: "border-[#7DD3FC]",
+            bgColor: "bg-[#1a1d25]",
+            borderColor: "border-[#3f3f46]",
           };
         case "tool_result":
           return {
             icon: message.toolResult === "error" ? "❌" : "✅",
             label: `工具结果: ${message.toolName || "未知"}`,
-            bgColor: "bg-[#F5F3FF]",
-            borderColor: "border-[#A78BFA]",
+            bgColor: "bg-[#1a1d25]",
+            borderColor: message.toolResult === "error" ? "border-[#ef4444]" : "border-[#14b8a6]",
           };
         case "thought":
           return {
             icon: "💭",
             label: "思考中...",
-            bgColor: "bg-[#FEF3C7]",
-            borderColor: "border-[#FBBF24]",
+            bgColor: "bg-[#1a1d25]",
+            borderColor: "border-[#f59e0b]",
           };
         default:
           return null;
@@ -99,7 +99,7 @@ class MessageBubble extends Component<MessageBubbleProps> {
       >
         {showAvatar && !isUser && (
           <View className="w-8 h-8 rounded-full overflow-hidden mr-2 shrink-0 shadow-sm">
-            <View className="w-full h-full bg-[#00A884] flex items-center justify-center">
+            <View className="w-full h-full bg-[#ff5c5c] flex items-center justify-center">
               <Text className="text-white text-[11px] font-semibold">AI</Text>
             </View>
           </View>
@@ -110,13 +110,13 @@ class MessageBubble extends Component<MessageBubbleProps> {
           className={[
             "relative px-2.5 py-1.5 rounded-lg max-w-full shadow-sm",
             isUser
-              ? `bg-[#D9FDD3] text-[#111B21] rounded-br-sm ${
+              ? `bg-[#262a35] oc-text rounded-br-sm ${
                   isGrouped ? "rounded-br-lg" : ""
                 }`
-              : `bg-white text-[#111B21] rounded-bl-sm ${
+              : `bg-[#1a1d25] oc-text rounded-bl-sm border border-[#27272a] ${
                   isGrouped ? "rounded-bl-lg" : ""
                 }`,
-            isError ? "bg-[#FEF0F0] border border-[#F8CACA]" : "",
+            isError ? "bg-[#1a1d25] border border-[#ef4444]" : "",
             typeInfo
               ? `${typeInfo.bgColor} border ${typeInfo.borderColor}`
               : "",
@@ -134,12 +134,12 @@ class MessageBubble extends Component<MessageBubbleProps> {
             <View className="flex items-center justify-between mb-1">
               <View className="flex items-center flex-1">
                 <Text className="mr-1">{typeInfo.icon}</Text>
-                <Text className="text-[12px] text-[#667781] font-medium">
+                <Text className="text-[12px] oc-muted font-medium">
                   {typeInfo.label}
                 </Text>
               </View>
               {/* Collapse/Expand chevron */}
-              <Text className="text-[12px] text-[#667781] ml-2 select-none">
+              <Text className="text-[12px] oc-muted ml-2 select-none">
                 {collapsed ? "▶" : "▼"}
               </Text>
             </View>
@@ -148,58 +148,58 @@ class MessageBubble extends Component<MessageBubbleProps> {
           {/* Status indicator for sending messages */}
           {message.status === "sending" && (
             <View className="flex items-center mb-1 opacity-60">
-              <View className="tw-dot tw-bounce-1 mx-[1px] w-1 h-1 bg-[#8696A0] rounded-full" />
-              <View className="tw-dot tw-bounce-2 mx-[1px] w-1 h-1 bg-[#8696A0] rounded-full" />
-              <View className="tw-dot tw-bounce-3 mx-[1px] w-1 h-1 bg-[#8696A0] rounded-full" />
+              <View className="tw-dot tw-bounce-1 mx-[1px] w-1 h-1 bg-[#71717a] rounded-full" />
+              <View className="tw-dot tw-bounce-2 mx-[1px] w-1 h-1 bg-[#71717a] rounded-full" />
+              <View className="tw-dot tw-bounce-3 mx-[1px] w-1 h-1 bg-[#71717a] rounded-full" />
             </View>
           )}
 
           {/* Error indicator */}
           {isError && (
             <View className="flex items-center mb-1">
-              <Text className="text-[#EA868F] text-[11px]">发送失败</Text>
+              <Text className="text-[#ef4444] text-[11px]">发送失败</Text>
             </View>
           )}
 
           {/* Message content - show collapsed or full */}
           {collapsed && isToolMessage ? (
             <View className="py-1">
-              <Text className="text-[13px] leading-[1.4] text-[#667781] italic">
+              <Text className="text-[13px] leading-[1.4] oc-muted italic">
                 {getPreviewText(message.content)}
               </Text>
-              <Text className="text-[11px] text-[#999999] mt-1">
+              <Text className="text-[11px] oc-muted mt-1">
                 点击展开查看完整内容
               </Text>
             </View>
           ) : messageType === "tool_result" &&
             message.toolResult === "error" ? (
             <Text
-              className="text-[13px] leading-[1.4] whitespace-pre-wrap break-all text-[#DC2626]"
+              className="text-[13px] leading-[1.4] whitespace-pre-wrap break-all text-[#ef4444]"
               userSelect
             >
               {message.content}
             </Text>
           ) : (
             <Text
-              className="text-[14px] leading-[1.4] whitespace-pre-wrap break-all text-[#111B21]"
+              className="text-[14px] leading-[1.4] whitespace-pre-wrap break-all oc-text"
               userSelect
             >
               {message.content}
               {isStreaming && (
-                <Text className="ml-[1px] text-[#00A884] animate-pulse">▋</Text>
+                <Text className="ml-[1px] text-[#ff5c5c] animate-pulse">▋</Text>
               )}
             </Text>
           )}
 
           {/* Timestamp and ticks */}
           <View className="flex items-center justify-end gap-1 mt-0.5">
-            <Text className="text-[10px] text-[#667781]">
+            <Text className="text-[10px] oc-muted">
               {formatTime(message.timestamp)}
             </Text>
             {isUser && message.status === "sent" && (
               <Text
                 className={`text-[11px] ${
-                  message.read ? "text-[#53BDEB]" : "text-[#8696A0]"
+                  message.read ? "text-[#3b82f6]" : "oc-muted"
                 }`}
               >
                 {message.read ? "✓✓" : "✓"}

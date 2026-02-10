@@ -255,27 +255,27 @@ class Chat extends Component<ChatProps, ChatState> {
     const messageGroups = this.groupMessages(visibleMessages || []);
 
     return (
-      <View className="flex h-screen bg-[#ECE5DD]">
+      <View className="flex h-screen oc-bg">
         {/* Status bar spacer for capsule button */}
-        <View style={{ height: statusBarHeight }} className="bg-[#ECE5DD] w-full fixed top-0 left-0 z-50" />
+        <View style={{ height: statusBarHeight }} className="oc-bg w-full fixed top-0 left-0 z-50" />
 
         <View className="flex flex-1 min-h-0" style={{ paddingTop: statusBarHeight }}>
           {/* Sidebar */}
           <View
-            className={`flex flex-col bg-[#111B21] text-[#D1D7DB] border-r border-[#2A3942] transition-all duration-300 ease-in-out overflow-hidden ${
+            className={`flex flex-col oc-bg-elevated text-[#D1D7DB] border-r border-[#27272a] transition-all duration-300 ease-in-out overflow-hidden ${
               sidebarOpen ? "w-[280px]" : "w-0"
             }`}
           >
-            <View className="flex flex-col items-center justify-between px-4 py-3 h-14 bg-[#202C33]">
+            <View className="flex flex-col items-center justify-between px-4 py-3 h-14 bg-[#1a1d25]">
               <View className="flex items-center w-full justify-between">
-                <Text className="text-[16px] font-semibold text-[#E9EDEF]">
+                <Text className="text-[16px] font-semibold oc-text-strong">
                   OpenClaw
                 </Text>
                 <View
-                  className="w-8 h-8 rounded-full flex items-center justify-center active:bg-[#37424F] transition-colors"
+                  className="w-8 h-8 rounded-full flex items-center justify-center active:bg-[#262a35] transition-colors"
                   onClick={this.handleToggleSidebar}
                 >
-                  <Text className="text-[16px] text-[#A5B1B8]">✕</Text>
+                  <Text className="text-[16px] oc-muted">✕</Text>
                 </View>
               </View>
             </View>
@@ -289,22 +289,22 @@ class Chat extends Component<ChatProps, ChatState> {
                         key={session.id}
                         className={`flex items-center mx-3 my-1 px-3 py-3 rounded-lg transition-all ${
                           sessionId === session.id
-                            ? "bg-[#2A3942] text-[#E9EDEF]"
-                            : "text-[#D1D7DB] active:bg-[#2A3942]"
+                            ? "bg-[#262a35] oc-text-strong"
+                            : "oc-text active:bg-[#262a35]"
                         }`}
                         onClick={() => {
                           this.handleSelectSession(session.id);
                           this.handleToggleSidebar(); // Close sidebar after selecting
                         }}
                       >
-                        <View className="w-10 h-10 rounded-full bg-[#00A884] flex items-center justify-center mr-3 shrink-0">
+                        <View className="w-10 h-10 rounded-full bg-[#ff5c5c] flex items-center justify-center mr-3 shrink-0">
                           <Text className="text-[16px]">💬</Text>
                         </View>
                         <View className="flex-1 min-w-0">
-                          <Text className="text-[14px] font-medium truncate text-[#E9EDEF]">
+                          <Text className="text-[14px] font-medium truncate oc-text-strong">
                             {session.id}
                           </Text>
-                          <Text className="text-[12px] text-[#8696A0] truncate">
+                          <Text className="text-[12px] oc-muted truncate">
                             点击查看对话
                           </Text>
                         </View>
@@ -313,7 +313,7 @@ class Chat extends Component<ChatProps, ChatState> {
                   ) : (
                     <View className="py-8 flex flex-col items-center justify-center">
                       <Text className="text-[32px] mb-2 opacity-30">💬</Text>
-                      <Text className="text-[13px] text-[#8696A0] text-center">
+                      <Text className="text-[13px] oc-muted text-center">
                         暂无会话记录
                       </Text>
                     </View>
@@ -322,79 +322,79 @@ class Chat extends Component<ChatProps, ChatState> {
               </ScrollView>
 
               {/* Create New Session Button */}
-              <View className="px-3 py-2 border-t border-[#2A3942]">
+              <View className="px-3 py-2 border-t border-[#27272a]">
                 <View
-                  className="flex items-center rounded-lg px-3 py-2.5 active:bg-[#2A3942] transition-colors justify-start"
+                  className="flex items-center rounded-lg px-3 py-2.5 active:bg-[#262a35] transition-colors justify-start"
                   onClick={() => {
                     const { chatStore } = this.props;
                     chatStore.setSessionId("");
                     this.handleToggleSidebar();
                   }}
                 >
-                  <View className="w-9 h-9 rounded-full flex items-center justify-center bg-[#00A884] mr-3">
+                  <View className="w-9 h-9 rounded-full flex items-center justify-center bg-[#ff5c5c] mr-3">
                     <Text className="text-[18px] text-white font-light">+</Text>
                   </View>
-                  <Text className="text-[14px] font-medium text-[#E9EDEF]">
+                  <Text className="text-[14px] font-medium oc-text-strong">
                     新会话
                   </Text>
                 </View>
               </View>
 
               {/* Sidebar Footer */}
-              <View className="p-3 border-t border-[#2A3942] space-y-1">
+              <View className="p-3 border-t border-[#27272a] space-y-1">
                 <View
-                  className="flex items-center rounded-lg px-3 py-2 active:bg-[#2A3942] transition-colors justify-start"
+                  className="flex items-center rounded-lg px-3 py-2 active:bg-[#262a35] transition-colors justify-start"
                   onClick={this.handleClearHistory}
                 >
-                  <View className="w-9 h-9 rounded-full flex items-center justify-center bg-[#37424F] mr-3">
-                    <Text className="text-[16px] text-[#E9EDEF]">🗑</Text>
+                  <View className="w-9 h-9 rounded-full flex items-center justify-center bg-[#3f3f46] mr-3">
+                    <Text className="text-[16px] oc-text-strong">🗑</Text>
                   </View>
-                  <Text className="text-[14px] text-[#D1D7DB]">清空对话</Text>
+                  <Text className="text-[14px] oc-text">清空对话</Text>
                 </View>
                 <View
-                  className="flex items-center rounded-lg px-3 py-2 active:bg-[#2A3942] transition-colors justify-start"
+                  className="flex items-center rounded-lg px-3 py-2 active:bg-[#262a35] transition-colors justify-start"
                   onClick={() => chatStore?.requestSessionList?.()}
                 >
-                  <View className="w-9 h-9 rounded-full flex items-center justify-center bg-[#37424F] mr-3">
+                  <View className="w-9 h-9 rounded-full flex items-center justify-center bg-[#3f3f46] mr-3">
                     <Text
-                      className={`text-[16px] text-[#8696A0] ${sessionsLoading ? "animate-spin" : ""}`}
+                      className={`text-[16px] oc-muted ${sessionsLoading ? "animate-spin" : ""}`}
                     >
                       ⟳
                     </Text>
                   </View>
-                  <Text className="text-[14px] text-[#D1D7DB]">刷新列表</Text>
+                  <Text className="text-[14px] oc-text">刷新列表</Text>
                 </View>
               </View>
             </View>
           </View>
 
           {/* Main */}
-          <View className="flex flex-col flex-1 min-w-0 bg-[#ECE5DD]">
+          <View className="flex flex-col flex-1 min-w-0 oc-bg">
             {/* Header */}
-            <View className="flex items-center h-12 px-3 header-frosted border-b border-[#E9EDEF]/30">
+            <View className="flex items-center h-12 px-3 header-frosted">
               <View
-                className="w-9 h-9 rounded-full flex items-center justify-center active:bg-white/30 transition-colors"
+                className="w-9 h-9 rounded-full flex items-center justify-center active:bg-[#262a35] transition-colors"
                 onClick={this.handleToggleSidebar}
               >
-                <Text className="text-[18px] text-[#54656F]">☰</Text>
+                <Text className="text-[18px] oc-text">☰</Text>
               </View>
               <View className="flex-1 flex flex-col items-center justify-center">
                 <View className="flex items-center gap-2">
-                  <Text className="text-[15px] font-semibold text-[#111B21]">
+                  <Text className="text-[15px] font-semibold oc-text-strong">
                     {sessionId ? sessionId : "OpenClaw"}
                   </Text>
                   {streaming && (
                     <View className="flex items-center gap-0.5">
                       <View
-                        className="w-1 h-1 bg-[#00A884] rounded-full animate-bounce"
+                        className="w-1 h-1 bg-[#ff5c5c] rounded-full animate-bounce"
                         style={{ animationDelay: "0ms" }}
                       />
                       <View
-                        className="w-1 h-1 bg-[#00A884] rounded-full animate-bounce"
+                        className="w-1 h-1 bg-[#ff5c5c] rounded-full animate-bounce"
                         style={{ animationDelay: "150ms" }}
                       />
                       <View
-                        className="w-1 h-1 bg-[#00A884] rounded-full animate-bounce"
+                        className="w-1 h-1 bg-[#ff5c5c] rounded-full animate-bounce"
                         style={{ animationDelay: "300ms" }}
                       />
                     </View>
@@ -404,7 +404,7 @@ class Chat extends Component<ChatProps, ChatState> {
               <View className="w-9 flex items-center justify-end">
                 {connected && (
                   <View
-                    className={`w-2 h-2 rounded-full ${streaming ? "bg-[#00A884] animate-pulse" : "bg-[#25D366]"}`}
+                    className={`w-2 h-2 rounded-full ${streaming ? "bg-[#ff5c5c] animate-pulse" : "bg-[#22c55e]"}`}
                   />
                 )}
               </View>
@@ -428,13 +428,13 @@ class Chat extends Component<ChatProps, ChatState> {
                   ))
                 ) : (
                   <View className="flex-1 flex flex-col items-center justify-center py-20 px-6">
-                    <View className="w-20 h-20 rounded-full bg-[#00A884] flex items-center justify-center mb-5">
+                    <View className="w-20 h-20 rounded-full bg-[#ff5c5c] flex items-center justify-center mb-5">
                       <Text className="text-[36px]">🤖</Text>
                     </View>
-                    <Text className="text-[18px] font-semibold text-[#111B21] mb-2">
+                    <Text className="text-[18px] font-semibold oc-text-strong mb-2">
                       OpenClaw AI
                     </Text>
-                    <Text className="text-[14px] text-[#54656F] text-center max-w-[260px]">
+                    <Text className="text-[14px] oc-muted text-center max-w-[260px]">
                       开始新对话，或从侧边栏选择历史会话
                     </Text>
                   </View>

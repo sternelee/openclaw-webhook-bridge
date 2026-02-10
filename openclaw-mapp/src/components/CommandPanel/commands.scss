@@ -1,10 +1,11 @@
+/* OpenClaw Command Panel - Dark Theme */
 .command-panel-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: flex-end;
   z-index: 1000;
@@ -15,21 +16,23 @@
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
+  background-color: #1a1d25;
   border-radius: 16px 16px 0 0;
   overflow: hidden;
+  border-top: 1px solid #27272a;
 
   .panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 10px 16px;
-    border-bottom: 1px solid #e5e5e5;
+    border-bottom: 1px solid #27272a;
+    background-color: #12141a;
 
     .panel-title {
       font-size: 15px;
       font-weight: 600;
-      color: #333;
+      color: #e4e4e7;
     }
 
     .close-btn {
@@ -42,10 +45,10 @@
       cursor: pointer;
       transition: background-color 0.2s;
       font-size: 16px;
-      color: #666;
+      color: #71717a;
 
       &:active {
-        background-color: #f0f0f0;
+        background-color: #262a35;
       }
     }
   }
@@ -61,7 +64,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 10px 16px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid #27272a;
     cursor: pointer;
     transition: background-color 0.2s;
 
@@ -70,13 +73,13 @@
     }
 
     &:active {
-      background-color: #f5f5f5;
+      background-color: #262a35;
     }
 
     .command-desc {
       flex: 1;
       font-size: 14px;
-      color: #333;
+      color: #e4e4e7;
       line-height: 1.3;
       margin-right: 12px;
 
@@ -90,8 +93,8 @@
 
     .command-text {
       font-size: 12px;
-      color: #1890ff;
-      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      color: #ff5c5c;
+      font-family: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', monospace;
       font-weight: 500;
       white-space: nowrap;
       flex-shrink: 0;
@@ -100,21 +103,22 @@
     .command-icon {
       font-size: 16px;
       flex-shrink: 0;
+      color: #71717a;
     }
   }
 
   // Settings item - special styling
   .command-item-settings {
-    border-bottom: 1px solid #e0e0e0;
-    background-color: #fafafa;
+    border-bottom: 1px solid #3f3f46;
+    background-color: #1e2028;
 
     .command-desc {
-      color: #333;
+      color: #e4e4e7;
       font-weight: 500;
     }
 
     .command-icon {
-      color: #666;
+      color: #71717a;
     }
   }
 }
