@@ -177,11 +177,15 @@ export class WebSocketHub {
     try {
       const uid = this.uidByConnection.get(ws);
 
+      console.log(`[WebSocketHub] Received message from UID=${uid}, data=${typeof data === "string" ? data.substring(0, 100) : "binary"}`);
+
       // Broadcast to all connected clients with the SAME UID (no echo to sender)
       if (uid) {
-        this.broadcastToUIDExcept(uid, data as string, ws);
+        const sentCount = this.broadcastToUIDExcept(uid, data as string, ws);
+        console.log(`[WebSocketHub] Broadcast to ${sentCount} clients with UID=${uid}`);
       } else {
         // Fallback for hibernated connections without UID
+        console.warn("[WebSocketHub] No UID for message, broadcasting to all");
         this.broadcastExcept(data as string, ws);
       }
     } catch (error) {

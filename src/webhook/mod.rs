@@ -176,11 +176,19 @@ impl Client {
                 msg_result = read.next() => {
                     match msg_result {
                         Some(Ok(Message::Text(text))) => {
+                            info!("[Webhook] Received text message: {} bytes", text.len());
+                            // Log message preview for debugging
+                            if text.len() < 200 {
+                                log::debug!("[Webhook] Message content: {}", text);
+                            } else {
+                                log::debug!("[Webhook] Message preview: {}...", &text[..200]);
+                            }
                             if let Err(e) = handler(text.into_bytes()) {
                                 warn!("[Webhook] Handler error: {}", e);
                             }
                         }
                         Some(Ok(Message::Binary(data))) => {
+                            info!("[Webhook] Received binary message: {} bytes", data.len());
                             if let Err(e) = handler(data) {
                                 warn!("[Webhook] Handler error: {}", e);
                             }
