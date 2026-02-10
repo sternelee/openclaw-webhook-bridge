@@ -1,6 +1,6 @@
 [package]
 name = "openclaw-bridge"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 authors = ["OpenClaw Contributors"]
 description = "Bridge between WebSocket webhooks and OpenClaw AI Gateway"
