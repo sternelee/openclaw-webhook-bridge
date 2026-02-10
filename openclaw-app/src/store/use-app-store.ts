@@ -19,6 +19,7 @@ import * as SessionStorage from '@/lib/session-storage';
 interface AppState {
   // Connection state
   connected: boolean;
+  connecting: boolean;
   gatewayUrl: string;
   token: string;
   uid: string;
@@ -123,6 +124,7 @@ export const useAppStore = create<AppState>()(
       (set, get) => ({
         // Initial state
         connected: false,
+        connecting: false,
         gatewayUrl: '',
         token: '',
         uid: '',
@@ -214,11 +216,14 @@ export const useAppStore = create<AppState>()(
 
         // Connection management
         connect: () => {
-          const { gatewayUrl, token, uid, client, connected } = get();
+          const { gatewayUrl, token, uid, client, connected, connecting } = get();
           if (!gatewayUrl) return;
 
-          // If already connected, don't reconnect
-          if (connected) return;
+          // If already connected or connecting, don't reconnect
+          if (connected || connecting) return;
+
+          // Set connecting state
+          set({ connecting: true });
 
           // Stop existing client if any
           client?.stop();
@@ -236,7 +241,7 @@ export const useAppStore = create<AppState>()(
               mode: isWebhookMode ? 'bridge' : 'control-ui',
               useWebhookMode: isWebhookMode,
               onHello: (hello) => {
-                set({ hello: hello, connected: true, lastError: null });
+                set({ connecting: false, hello: hello, connected: true, lastError: null });
                 console.log('[Gateway] Connected:', hello);
               },
               onEvent: (evt) => {
@@ -326,7 +331,7 @@ export const useAppStore = create<AppState>()(
                 }
               },
               onClose: (info) => {
-                set({ connected: false, hello: null });
+                set({ connecting: false, connected: false, hello: null });
                 console.log('[Gateway] Closed:', info);
               },
             });
@@ -339,7 +344,7 @@ export const useAppStore = create<AppState>()(
         disconnect: () => {
           const { client } = get();
           client?.stop();
-          set({ client: null, connected: false, hello: null });
+          set({ client: null, connected: false, connecting: false, hello: null });
         },
 
         sendMessage: async (content, attachments?) => {
