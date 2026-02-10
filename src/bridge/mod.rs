@@ -222,9 +222,27 @@ impl Bridge {
             }
         };
 
-        // Skip internal lifecycle events
-        if let Some(event_type) = event.get("event").and_then(|v| v.as_str()) {
-            if matches!(event_type, "lifecycle" | "tick" | "presence" | "health") {
+        // Check event format: could be "type": "event" with event name, or direct type
+        let is_event_frame = event.get("type").and_then(|v| v.as_str()) == Some("event");
+        let event_name = if is_event_frame {
+            event.get("event").and_then(|v| v.as_str())
+        } else {
+            event.get("type").and_then(|v| v.as_str())
+        };
+
+        // Log important events for debugging
+        if let Some(name) = event_name {
+            match name {
+                "ticket" | "heartbeat" | "heart" => {
+                    info!("[Bridge] Received event: {}", name);
+                }
+                _ => {}
+            }
+        }
+
+        // Skip internal lifecycle events that are too noisy
+        if let Some(name) = event_name {
+            if matches!(name, "tick" | "lifecycle" | "presence" | "health") {
                 return;
             }
         }
@@ -240,6 +258,18 @@ impl Bridge {
         let event_type = event.get("type")?.as_str()?;
 
         match event_type {
+            // Handle event frame format: { type: "event", event: "ticket", payload: {...} }
+            "event" => {
+                let event_name = event.get("event")?.as_str()?;
+                // Convert event frame to a simpler format for webhook
+                let response = json!({
+                    "type": "event",
+                    "event": event_name,
+                    "payload": event.get("payload"),
+                    "seq": event.get("seq"),
+                });
+                serde_json::to_vec(&response).ok()
+            }
             "agent" => {
                 let stream = event.get("stream")?.as_str()?;
                 let session_key = event.get("sessionKey")?.as_str()?;
@@ -319,7 +349,11 @@ impl Bridge {
                     _ => None,
                 }
             }
-            _ => serde_json::to_vec(event).ok(),
+            // Pass through all other event types unchanged
+            _ => {
+                info!("[Bridge] Passthrough event type: {}", event_type);
+                serde_json::to_vec(event).ok()
+            }
         }
     }
 

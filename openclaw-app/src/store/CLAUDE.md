@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #1085 | 12:05 PM | 🔴 | Fixed WebSocket connection state not resetting on close | ~215 |
+| #1099 | 12:22 PM | 🟣 | Integrated GatewayClient with Zustand store | ~201 |
 </claude-mem-context>
