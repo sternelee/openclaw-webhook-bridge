@@ -3,9 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust Version](https://img.shields.io/badge/Rust-1.70+-orange?flat&logo=rust)](https://www.rust-lang.org)
 
-OpenClaw 是一个 AI Agent Gateway 系统，openclaw-run 是其官方桥接实现，包含 Rust 桥接服务、Cloudflare Workers Webhook 和 Web 前端应用。
+> **[English](README.md) | [简体中文](README_ZH.md)**
 
-## 系统架构
+OpenClaw is an AI Agent Gateway system. openclaw-run is the official bridge implementation containing a Rust bridge service, Cloudflare Workers webhook, and web frontend applications.
+
+## System Architecture
 
 ```
 ┌─────────────────┐     WebSocket      ┌──────────────────┐
@@ -33,49 +35,49 @@ OpenClaw 是一个 AI Agent Gateway 系统，openclaw-run 是其官方桥接实�
                                        └──────────────────┘
 ```
 
-## 组件说明
+## Components
 
-| 组件 | 目录 | 技术栈 | 说明 |
-|------|------|--------|------|
-| **OpenClaw Bridge** | `src/` | Rust | 连接 Webhook 和 OpenClaw Gateway 的守护进程 |
-| **Cloudflare Workers Webhook** | `cloudflare-webhook/` | Hono + DO | 生产环境 WebSocket 服务 |
-| **Web App** | `openclaw-app/` | Next.js 16 + OpenNext | 移动端优化的 Web 界面 |
-| **WeChat Mini-Program** | `openclaw-mapp/` | Taro + React | 微信小程序前端 |
+| Component | Directory | Tech Stack | Description |
+|-----------|----------|------------|-------------|
+| **OpenClaw Bridge** | `src/` | Rust | Daemon connecting Webhook to OpenClaw Gateway |
+| **Cloudflare Workers Webhook** | `cloudflare-webhook/` | Hono + DO | Production WebSocket service |
+| **Web App** | `openclaw-app/` | Next.js 16 + OpenNext | Mobile-optimized web interface |
+| **WeChat Mini-Program** | `openclaw-mapp/` | Taro + React | WeChat mini-program frontend |
 
-### OpenClaw Bridge 特性
+### OpenClaw Bridge Features
 
-- **高性能**: 异步 I/O、类型安全、零成本抽象
-- **轻量级**: 二进制大小 ~2.7MB (stripped)，内存占用 2-3MB
-- **跨平台**: Linux, macOS, Windows
-- **可靠连接**: 自动重连、指数退避、会话持久化
-- **多实例支持**: UID 路由机制支持多桥接实例
+- **High Performance**: Async I/O, type-safe, zero-cost abstractions
+- **Lightweight**: ~2.7MB binary size (stripped), 2-3MB memory usage
+- **Cross-platform**: Linux, macOS, Windows
+- **Reliable Connection**: Auto-reconnect, exponential backoff, session persistence
+- **Multi-instance Support**: UID routing for multiple bridge instances
 
-### openclaw-app 特性
+### openclaw-app Features
 
-- **移动端优化**: 响应式设计、触摸友好、安全区域适配
-- **功能页面**:
-  - Chat - 流式对话界面
-  - Sessions - 会话管理
-  - Channels - 通道配置（WhatsApp、Nostr、Telegram 等）
-  - Nodes - 设备和节点管理
-  - Config - 配置编辑（表单/JSON5）
-  - Debug - RPC 调用和事件日志
-  - Overview - 连接状态概览
+- **Mobile-optimized**: Responsive design, touch-friendly, safe area insets
+- **Feature Pages**:
+  - Chat - Streaming conversation interface
+  - Sessions - Session management
+  - Channels - Channel configuration (WhatsApp, Nostr, Telegram, etc.)
+  - Nodes - Device and node management
+  - Config - Configuration editing (form/JSON5)
+  - Debug - RPC calls and event logs
+  - Overview - Connection status overview
 
-## 快速开始
+## Quick Start
 
-### 前置要求
+### Prerequisites
 
-- OpenClaw Gateway 正在本地运行（默认端口 18789）
-- 配置文件位置: `~/.openclaw/`
+- OpenClaw Gateway running locally (default port 18789)
+- Config location: `~/.openclaw/`
 
-### 安装 Bridge
+### Install Bridge
 
-#### 预编译二进制
+#### Pre-built Binaries
 
-从 [Releases](https://github.com/sternelee/openclaw-run/releases) 下载对应平台的二进制文件。
+Download binaries for your platform from [Releases](https://github.com/sternelee/openclaw-run/releases).
 
-#### 从源码编译
+#### Build from Source
 
 ```bash
 git clone https://github.com/sternelee/openclaw-run.git
@@ -83,27 +85,27 @@ cd openclaw-run
 cargo build --release
 ```
 
-编译后的二进制文件位于 `target/release/openclaw-bridge`。
+The built binary is located at `target/release/openclaw-bridge`.
 
-### 使用 Bridge
+### Using Bridge
 
 ```bash
-# 首次启动（会提示输入配置）
+# First start (prompts for configuration)
 ./openclaw-bridge start
 
-# 后台启动
+# Background start
 ./openclaw-bridge start
 
-# 日常管理
-./openclaw-bridge stop      # 停止
-./openclaw-bridge restart   # 重启
-./openclaw-bridge status    # 查看状态
-./openclaw-bridge run       # 前台运行
+# Daily management
+./openclaw-bridge stop      # Stop
+./openclaw-bridge restart   # Restart
+./openclaw-bridge status    # Check status
+./openclaw-bridge run       # Foreground run
 ```
 
-### 配置文件
+### Configuration File
 
-配置保存在 `~/.openclaw/bridge.json`：
+Configuration is saved in `~/.openclaw/bridge.json`:
 
 ```json
 {
@@ -113,18 +115,18 @@ cargo build --release
 }
 ```
 
-### 日志
+### Logging
 
 ```bash
 tail -f ~/.openclaw/bridge.log
 ```
 
-通过 `RUST_LOG` 环境变量设置日志级别：
+Set log level via `RUST_LOG` environment variable:
 
 ```bash
-RUST_LOG=info ./openclaw-bridge run     # 默认
-RUST_LOG=debug ./openclaw-bridge run    # 详细
-RUST_LOG=warn ./openclaw-bridge run    # 安静
+RUST_LOG=info ./openclaw-bridge run     # Default
+RUST_LOG=debug ./openclaw-bridge run    # Verbose
+RUST_LOG=warn ./openclaw-bridge run    # Quiet
 ```
 
 ## Cloudflare Workers Webhook
@@ -132,9 +134,9 @@ RUST_LOG=warn ./openclaw-bridge run    # 安静
 ```bash
 cd cloudflare-webhook
 pnpm install
-pnpm dev      # 本地开发
-pnpm deploy   # 部署到 Cloudflare
-pnpm tail     # 实时日志
+pnpm dev      # Local development
+pnpm deploy   # Deploy to Cloudflare
+pnpm tail     # Real-time logs
 ```
 
 ## openclaw-app
@@ -142,93 +144,93 @@ pnpm tail     # 实时日志
 ```bash
 cd openclaw-app
 pnpm install
-pnpm dev          # 本地开发 (localhost:3000)
-pnpm build        # 构建生产版本
-pnpm deploy       # 部署到 Cloudflare (OpenNext)
+pnpm dev          # Local development (localhost:3000)
+pnpm build        # Build for production
+pnpm deploy       # Deploy to Cloudflare (OpenNext)
 ```
 
-## openclaw-mapp (微信小程序)
+## openclaw-mapp (WeChat Mini-Program)
 
 ```bash
 cd openclaw-mapp
 pnpm install
-pnpm dev:weapp    # 开发
+pnpm dev:weapp    # Development
 ```
 
-在微信开发者工具中导入 `dist/` 目录。
+Import the `dist/` directory in WeChat Developer Tools.
 
-## WebSocket 协议
+## WebSocket Protocol
 
-### 客户端发送消息格式
+### Client Message Format
 
 ```json
 {
   "id": "unique-message-id",
-  "content": "用户消息内容",
+  "content": "User message content",
   "session": "optional-session-id"
 }
 ```
 
-### 服务端响应格式
+### Server Response Format
 
-**流式更新 (progress)**
+**Streaming Update (progress)**
 ```json
 {
   "type": "progress",
-  "content": "当前的回复内容",
+  "content": "Current response content",
   "session": "session-id"
 }
 ```
 
-**完成 (complete)**
+**Complete (complete)**
 ```json
 {
   "type": "complete",
-  "content": "最终回复内容",
+  "content": "Final response content",
   "session": "session-id"
 }
 ```
 
-## UID 路由机制
+## UID Routing Mechanism
 
-所有 WebSocket 连接使用 UID（唯一标识符）进行路由：
+All WebSocket connections use UID (Unique Identifier) for routing:
 
-1. Bridge 启动时自动生成 UUID v4
-2. 客户端连接时附加 `?uid=xxx` 查询参数
-3. Durable Object 使用 `Map<UID, Set<WebSocket>>` 进行内部路由
+1. Bridge auto-generates UUID v4 on startup
+2. Client appends `?uid=xxx` query parameter when connecting
+3. Durable Object uses `Map<UID, Set<WebSocket>>` for internal routing
 
-这允许多个 Bridge 实例连接到同一个 Webhook 服务器。
+This allows multiple bridge instances to connect to the same webhook server.
 
-## 开发
+## Development
 
 ```bash
 # Bridge
-make fmt        # 格式化代码
-make clippy     # 静态分析
+make fmt        # Format code
+make clippy     # Lint checks
 make lint       # fmt + clippy
-make test       # 运行测试
-make build      # 编译当前平台
-make build-all  # 编译所有平台
+make test       # Run tests
+make build      # Build for current platform
+make build-all  # Build for all platforms
 ```
 
-## 事件处理
+## Event Handling
 
-Bridge 正确处理以下 OpenClaw Gateway 事件：
+The bridge correctly handles these OpenClaw Gateway events:
 
-- **agent**: AI 流式响应事件（lifecycle, assistant, tool）
-- **chat**: 聊天消息事件（delta, final, error）
-- **event**: 系统事件（ticket, heartbeat, heart 等）
-- 其他事件类型会透传并记录日志
+- **agent**: AI streaming response events (lifecycle, assistant, tool)
+- **chat**: Chat message events (delta, final, error)
+- **event**: System events (ticket, heartbeat, heart, etc.)
+- Other event types are passed through with logging
 
-## 贡献
+## Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and Pull Requests are welcome!
 
-## 许可证
+## License
 
-MIT License - 详见 [LICENSE](LICENSE) 文件
+MIT License - see [LICENSE](LICENSE) file for details
 
-## 相关项目
+## Related Projects
 
 - [OpenClaw Gateway](https://github.com/openclaw/gateway) - AI Agent Gateway
-- [openclaw/ui](https://github.com/openclaw/ui) - 参考的 Web UI 实现
+- [openclaw/ui](https://github.com/openclaw/ui) - Reference Web UI implementation
