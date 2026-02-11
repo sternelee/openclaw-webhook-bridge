@@ -1,226 +1,121 @@
 /**
- * Config page - Enhanced configuration page with sidebar navigation.
- * Ported from openclaw/ui reference implementation.
+ * Config page - Connection settings configuration.
+ * Configure Gateway URL, Token, and UID for WebSocket connection.
  */
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/use-app-store";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { MobileNavigation, MobileHeader } from "@/components/layout";
-import {
-  ConfigSidebar,
-  ConfigForm,
-  ConfigRaw,
-  ConfigDiff,
-} from "@/components/config";
-import type { JsonSchema } from "@/components/config/config-utils";
-
-// Mock config schema for development - would be loaded from gateway
-const MOCK_SCHEMA: JsonSchema = {
-  type: "object",
-  properties: {
-    env: {
-      type: "object",
-      title: "Environment",
-      description: "Environment variables and system configuration",
-      properties: {
-        logLevel: {
-          type: "string",
-          title: "Log Level",
-          description: "Set the logging verbosity",
-          enum: ["debug", "info", "warn", "error"],
-          default: "info",
-        },
-        port: {
-          type: "integer",
-          title: "Gateway Port",
-          description: "Port for the gateway server",
-          default: 18789,
-        },
-      },
-    },
-    agents: {
-      type: "object",
-      title: "Agents",
-      description: "Agent configuration and behavior",
-      properties: {
-        defaultAgent: {
-          type: "string",
-          title: "Default Agent",
-          description: "The default agent to use for conversations",
-          default: "main",
-        },
-        agentTimeout: {
-          type: "integer",
-          title: "Agent Timeout",
-          description: "Timeout in seconds for agent responses",
-          default: 120,
-        },
-      },
-    },
-    messages: {
-      type: "object",
-      title: "Messages",
-      description: "Message handling and processing",
-      properties: {
-        maxHistoryLength: {
-          type: "integer",
-          title: "Max History Length",
-          description: "Maximum number of messages to keep in history",
-          default: 100,
-        },
-        enableStreaming: {
-          type: "boolean",
-          title: "Enable Streaming",
-          description: "Enable streaming response generation",
-          default: true,
-        },
-      },
-    },
-  },
-};
+import { Icons } from "@/components/ui/icons";
+import { loadSettings, saveSettings } from "@/types/storage";
 
 export default function ConfigPage() {
-  const { connected } = useAppStore();
+  const router = useRouter();
+  const { 
+    connected, 
+    connecting,
+    gatewayUrl: storeGatewayUrl, 
+    token: storeToken, 
+    uid: storeUid,
+    setGatewayUrl,
+    setToken,
+    setUid,
+    connect,
+    disconnect,
+  } = useAppStore();
 
-  // Config state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [formMode, setFormMode] = useState<"form" | "raw">("form");
-  const [schema] = useState<JsonSchema | null>(MOCK_SCHEMA);
-  const [schemaLoading] = useState(false);
-
-  // Config values
-  const [formValue, setFormValue] = useState<Record<string, unknown> | null>({
-    env: {
-      logLevel: "info",
-      port: 18789,
-    },
-    agents: {
-      defaultAgent: "main",
-      agentTimeout: 120,
-    },
-    messages: {
-      maxHistoryLength: 100,
-      enableStreaming: true,
-    },
-  });
-  const [originalValue, setOriginalValue] = useState<Record<
-    string,
-    unknown
-  > | null>(null);
-  const [rawConfig, setRawConfig] = useState("");
-  const [originalRaw, setOriginalRaw] = useState("");
-
-  // Loading and validation states
-  const [loading, setLoading] = useState(false);
+  // Local form state
+  const [gatewayUrl, setLocalGatewayUrl] = useState("");
+  const [token, setLocalToken] = useState("");
+  const [uid, setLocalUid] = useState("");
   const [saving, setSaving] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [valid, setValid] = useState<boolean | null>(null);
-  const [issues, setIssues] = useState<unknown[]>([]);
+  const [hasChanges, setHasChanges] = useState(false);
 
-  // Initialize raw config when form value changes
+  // Load settings on mount
   useEffect(() => {
-    if (formValue && formMode === "raw") {
-      setRawConfig(JSON.stringify(formValue, null, 2));
-      setOriginalRaw(JSON.stringify(formValue, null, 2));
-    }
-  }, [formValue, formMode]);
+    const settings = loadSettings();
+    setLocalGatewayUrl(settings.gatewayUrl || storeGatewayUrl);
+    setLocalToken(settings.token || storeToken);
+    setLocalUid(settings.uid || storeUid);
+  }, [storeGatewayUrl, storeToken, storeUid]);
 
-  // Handle form patch
-  const handleFormPatch = useCallback(
-    (path: Array<string | number>, value: unknown) => {
-      setFormValue((prev) => {
-        if (!prev) return prev;
-
-        const newConfig = { ...prev };
-        let current: Record<string, unknown> = newConfig;
-
-        for (let i = 0; i < path.length - 1; i++) {
-          const key = path[i];
-          if (typeof key === "string") {
-            if (!current[key]) {
-              current[key] = {};
-            }
-            current = current[key] as Record<string, unknown>;
-          }
-        }
-
-        const lastKey = path[path.length - 1];
-        if (typeof lastKey === "string") {
-          current[lastKey] = value;
-        }
-
-        return newConfig;
-      });
-    },
-    [],
-  );
-
-  // Handle reload
-  const handleReload = async () => {
-    setLoading(true);
-    try {
-      // Would load from gateway in production
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setValid(true);
-      setIssues([]);
-    } catch (error) {
-      console.error("Failed to load config:", error);
-      setValid(false);
-      setIssues([error]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Check for changes
+  useEffect(() => {
+    const changed = 
+      gatewayUrl !== storeGatewayUrl ||
+      token !== storeToken ||
+      uid !== storeUid;
+    setHasChanges(changed);
+  }, [gatewayUrl, token, uid, storeGatewayUrl, storeToken, storeUid]);
 
   // Handle save
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Would save to disk in production
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setOriginalValue(formValue);
-      setOriginalRaw(rawConfig);
+      // Update store
+      setGatewayUrl(gatewayUrl.trim());
+      setToken(token.trim());
+      setUid(uid.trim());
+
+      // Save to localStorage
+      const settings = loadSettings();
+      saveSettings({
+        ...settings,
+        gatewayUrl: gatewayUrl.trim(),
+        token: token.trim(),
+        uid: uid.trim(),
+      });
+
+      // If connected, reconnect with new settings
+      if (connected) {
+        disconnect();
+        setTimeout(() => {
+          connect();
+        }, 500);
+      }
+
+      setHasChanges(false);
     } catch (error) {
-      console.error("Failed to save config:", error);
+      console.error("Failed to save settings:", error);
     } finally {
       setSaving(false);
     }
   };
 
-  // Handle apply
-  const handleApply = async () => {
-    setApplying(true);
-    try {
-      // Would apply to gateway in production
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    } catch (error) {
-      console.error("Failed to apply config:", error);
-    } finally {
-      setApplying(false);
-    }
+  // Handle reset
+  const handleReset = () => {
+    const settings = loadSettings();
+    setLocalGatewayUrl(settings.gatewayUrl);
+    setLocalToken(settings.token);
+    setLocalUid(settings.uid);
   };
 
-  // Compute changes
-  const hasChanges =
-    formMode === "form"
-      ? JSON.stringify(formValue) !== JSON.stringify(originalValue)
-      : rawConfig !== originalRaw;
-
-  // Available sections from schema
-  const availableSections = schema?.properties
-    ? Object.keys(schema.properties)
-    : [];
+  // Handle connect/disconnect
+  const handleConnectionToggle = () => {
+    if (connected) {
+      disconnect();
+    } else {
+      if (hasChanges) {
+        handleSave();
+      } else {
+        connect();
+      }
+    }
+  };
 
   // Header content for mobile
   const headerContent = (
     <>
       <h1 className="text-base md:text-lg font-semibold truncate">
-        Configuration
+        Connection Settings
       </h1>
       <div
         className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
@@ -258,142 +153,173 @@ export default function ConfigPage() {
       <header className="hidden md:flex items-center justify-between px-4 py-3 border-b border-border/50 bg-card/50 backdrop-blur">
         <div className="flex items-center gap-3">{headerContent}</div>
         <div className="flex items-center gap-2">
-          {/* Connection status indicator only - no connect/disconnect for config page */}
-          <div
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
-              connected
-                ? "bg-ok/10 text-ok"
-                : "bg-muted/50 text-muted-foreground"
-            }`}
+          <Button
+            variant={connected ? "destructive" : "default"}
+            size="sm"
+            onClick={handleConnectionToggle}
+            disabled={connecting}
           >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-ok animate-pulse" : ""}`}
-            />
-            {connected ? "Connected" : "Disconnected"}
-          </div>
+            {connecting ? (
+              <>
+                <Icons.loader className="h-4 w-4 mr-2 animate-spin" />
+                Connecting...
+              </>
+            ) : connected ? (
+              <>
+                <Icons.wifiOff className="h-4 w-4 mr-2" />
+                Disconnect
+              </>
+            ) : (
+              <>
+                <Icons.wifi className="h-4 w-4 mr-2" />
+                Connect
+              </>
+            )}
+          </Button>
         </div>
       </header>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - hidden on mobile */}
-        <div className="hidden md:block">
-          <ConfigSidebar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            activeSection={activeSection}
-            onSectionChange={setActiveSection}
-            formMode={formMode}
-            onFormModeChange={setFormMode}
-            validity={valid == null ? "unknown" : valid ? "valid" : "invalid"}
-            schemaLoading={schemaLoading}
-            availableSections={availableSections}
-          />
-        </div>
+        <ScrollArea className="flex-1">
+          <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
+            {/* Connection Status Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  {connected ? (
+                    <Icons.wifi className="h-5 w-5 text-ok" />
+                  ) : (
+                    <Icons.wifiOff className="h-5 w-5 text-muted-foreground" />
+                  )}
+                  Connection Status
+                </CardTitle>
+                <CardDescription>
+                  {connected
+                    ? "Connected to OpenClaw Gateway"
+                    : "Configure settings below and click Connect"}
+                </CardDescription>
+              </CardHeader>
+            </Card>
 
-        {/* Main Config Area */}
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {/* Action Bar */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-card/50">
-            <div className="flex items-center gap-2">
-              {hasChanges ? (
-                <span className="text-sm text-accent">Unsaved changes</span>
-              ) : (
-                <span className="text-sm text-muted-foreground">
-                  No changes
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
+            {/* Connection Settings Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Gateway Configuration</CardTitle>
+                <CardDescription>
+                  Configure WebSocket connection to OpenClaw Gateway or Webhook Bridge
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="gateway-url">
+                    Gateway URL <span className="text-danger">*</span>
+                  </Label>
+                  <Input
+                    id="gateway-url"
+                    type="text"
+                    placeholder="ws://localhost:18789 or wss://your-webhook.com/ws"
+                    value={gatewayUrl}
+                    onChange={(e) => setLocalGatewayUrl(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    WebSocket URL for OpenClaw Gateway (ws://localhost:18789) or Webhook Bridge (wss://...)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="token">
+                    Token <span className="text-muted-foreground text-xs">(optional)</span>
+                  </Label>
+                  <Input
+                    id="token"
+                    type="password"
+                    placeholder="Enter authentication token"
+                    value={token}
+                    onChange={(e) => setLocalToken(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Authentication token for Gateway access (leave empty if not required)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="uid">
+                    UID <span className="text-muted-foreground text-xs">(for webhook routing)</span>
+                  </Label>
+                  <Input
+                    id="uid"
+                    type="text"
+                    placeholder="Enter unique identifier"
+                    value={uid}
+                    onChange={(e) => setLocalUid(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Unique identifier for routing messages via Webhook Bridge (required for webhook mode)
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Info Card */}
+            <Card className="border-accent/20 bg-accent/5">
+              <CardContent className="pt-6">
+                <div className="flex gap-3">
+                  <Icons.info className="h-5 w-5 text-accent shrink-0 mt-0.5" />
+                  <div className="space-y-2 text-sm">
+                    <p className="font-medium text-foreground">Connection Modes</p>
+                    <ul className="space-y-1 text-muted-foreground">
+                      <li className="flex gap-2">
+                        <span className="text-accent">•</span>
+                        <span><strong>Gateway Mode:</strong> Connect directly to OpenClaw Gateway (ws://localhost:18789)</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-accent">•</span>
+                        <span><strong>Webhook Mode:</strong> Connect via Cloudflare Webhook Bridge (wss://...)</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-accent">•</span>
+                        <span>UID is required for webhook mode to route messages correctly</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3">
               <Button
                 variant="outline"
-                size="sm"
-                disabled={loading}
-                onClick={handleReload}
+                onClick={handleReset}
+                disabled={!hasChanges || saving}
               >
-                {loading ? "Loading..." : "Reload"}
+                Reset
               </Button>
               <Button
                 variant="default"
-                size="sm"
-                disabled={!hasChanges || saving}
                 onClick={handleSave}
+                disabled={!hasChanges || saving || !gatewayUrl.trim()}
+                className="flex-1"
               >
-                {saving ? "Saving..." : "Save"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!hasChanges || applying}
-                onClick={handleApply}
-              >
-                {applying ? "Applying..." : "Apply"}
+                {saving ? (
+                  <>
+                    <Icons.loader className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Icons.check className="h-4 w-4 mr-2" />
+                    Save Settings
+                  </>
+                )}
               </Button>
             </div>
           </div>
-
-          {/* Content Area */}
-          <ScrollArea className="flex-1">
-            <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
-              {/* Diff Viewer (form mode only) */}
-              {formMode === "form" && originalValue && formValue && (
-                <ConfigDiff original={originalValue} current={formValue} />
-              )}
-
-              {/* Form or Raw Editor */}
-              {formMode === "form" ? (
-                <ConfigForm
-                  schema={schema}
-                  value={formValue}
-                  disabled={loading || saving || applying}
-                  activeSection={activeSection}
-                  onPatch={handleFormPatch}
-                  uiHints={{}}
-                />
-              ) : (
-                <ConfigRaw
-                  value={rawConfig}
-                  onChange={setRawConfig}
-                  disabled={loading || saving || applying}
-                />
-              )}
-
-              {/* Issues Display */}
-              {issues.length > 0 && (
-                <div className="p-4 bg-danger/10 border border-danger/50 rounded-lg">
-                  <h3 className="text-sm font-medium text-danger mb-2">
-                    Configuration Issues
-                  </h3>
-                  <pre className="text-xs text-muted-foreground overflow-auto">
-                    {JSON.stringify(issues, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </main>
-      </div>
-
-      {/* Mobile Bottom Navigation */}
-      <div className="md:hidden">
-        <div className="flex items-center justify-around px-4 py-3 border-t border-border/50 bg-card/50">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setFormMode("form")}
-            className={formMode === "form" ? "bg-accent/10" : ""}
-          >
-            Form
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setFormMode("raw")}
-            className={formMode === "raw" ? "bg-accent/10" : ""}
-          >
-            Raw
-          </Button>
-        </div>
+        </ScrollArea>
       </div>
     </div>
   );
