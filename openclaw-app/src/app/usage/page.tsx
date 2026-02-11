@@ -90,7 +90,7 @@ export default function UsagePage() {
     } finally {
       setLoading(false);
     }
-  }, [connected]);
+  }, [connected, startDate, endDate]);
 
   useEffect(() => {
     if (connected) {
