@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/use-app-store";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,14 @@ function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
 }
 
+// Type definition for usage data
+interface UsageData {
+  totalTokens: number;
+  totalCost: number;
+  sessions: number;
+  messages: number;
+}
+
 export default function UsagePage() {
   const router = useRouter();
   const { connected } = useAppStore();
@@ -55,10 +63,10 @@ export default function UsagePage() {
   const [endDate, setEndDate] = useState(() => {
     return new Date().toISOString().split("T")[0];
   });
-  const [usageData, setUsageData] = useState<any>(null);
+  const [usageData, setUsageData] = useState<UsageData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadUsage = async () => {
+  const loadUsage = useCallback(async () => {
     if (!connected) return;
     
     setLoading(true);
@@ -82,13 +90,13 @@ export default function UsagePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [connected]);
 
   useEffect(() => {
     if (connected) {
       loadUsage();
     }
-  }, [connected]);
+  }, [connected, loadUsage]);
 
   const handleRefresh = () => {
     loadUsage();
