@@ -125,6 +125,10 @@ export class GatewayClient {
     // In Webhook mode, skip Gateway protocol handshake
     if (this.opts.useWebhookMode) {
       this.backoffMs = 800;
+      
+      // Send connection message in webhook mode
+      this.sendConnectionMessage();
+      
       // Simulate a hello response for compatibility
       const mockHello: GatewayHelloOk = {
         type: "hello-ok",
@@ -166,10 +170,40 @@ export class GatewayClient {
       .then((hello) => {
         this.backoffMs = 800;
         this.opts.onHello?.(hello);
+        
+        // Send connection message after successful hello
+        this.sendConnectionMessage();
       })
       .catch(() => {
         this.ws?.close(CONNECT_FAILED_CLOSE_CODE, "connect failed");
       });
+  }
+
+  /**
+   * Send connection established message
+   * Notifies server/bridge that client is ready
+   */
+  private sendConnectionMessage(): void {
+    try {
+      const message = {
+        type: "system.connected",
+        clientInfo: {
+          platform: this.opts.platform ?? "web",
+          mode: this.opts.mode ?? "webchat",
+          timestamp: Date.now(),
+          uid: this.opts.uid || "unknown",
+        },
+      };
+      
+      // Send after a short delay to ensure connection is stable
+      setTimeout(() => {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify(message));
+        }
+      }, 100);
+    } catch (error) {
+      console.error("[gateway] Error sending connection message:", error);
+    }
   }
 
   private handleMessage(raw: string) {

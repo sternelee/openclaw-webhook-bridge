@@ -102,6 +102,9 @@ export class WebSocketHub {
       // Store the SERVER socket (not client) for broadcasting
       // Map it to the UID for routing
       this.addToConnections(server, uid);
+      
+      // Send welcome message to the newly connected client
+      this.sendWelcomeMessage(server, uid);
 
       // Return the client socket to establish the connection
       return new Response(null, {
@@ -176,6 +179,20 @@ export class WebSocketHub {
   webSocketMessage(ws: WebSocket, data: string | ArrayBuffer) {
     try {
       const uid = this.uidByConnection.get(ws);
+      
+      // Parse message to check for system/config messages
+      let messageType = null;
+      try {
+        const parsed = JSON.parse(data as string);
+        messageType = parsed?.type;
+        
+        // Log connection and config messages (but not regular chat messages)
+        if (messageType === "system.connected" || messageType === "config.update") {
+          console.log(`[WebSocketHub] ${messageType} from UID=${uid}`);
+        }
+      } catch (e) {
+        // Not JSON or parsing failed, treat as regular message
+      }
 
       // Broadcast to all connected clients with the SAME UID (no echo to sender)
       if (uid) {
@@ -286,5 +303,33 @@ export class WebSocketHub {
       }
     }
     return sentCount;
+  }
+  
+  /**
+   * Send welcome message to newly connected client
+   * Notifies client that connection is established and ready
+   */
+  private sendWelcomeMessage(ws: WebSocket, uid: string): void {
+    try {
+      const message = {
+        type: "system.ready",
+        timestamp: Date.now(),
+        serverInfo: {
+          platform: "cloudflare-workers",
+          uid: uid,
+        },
+      };
+      
+      // Send after a short delay to ensure connection is stable
+      setTimeout(() => {
+        try {
+          ws.send(JSON.stringify(message));
+        } catch (error) {
+          console.error("[WebSocketHub] Failed to send welcome message:", error);
+        }
+      }, 100);
+    } catch (error) {
+      console.error("[WebSocketHub] Error preparing welcome message:", error);
+    }
   }
 }

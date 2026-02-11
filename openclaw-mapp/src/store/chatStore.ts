@@ -158,6 +158,9 @@ class ChatStore {
     this.wsUrl = url;
     this.wsService.setUrl(url);
     this.saveSettings();
+    
+    // Send config update message if connected
+    this.sendConfigUpdateMessage("wsUrl", url);
   };
 
   @action
@@ -167,6 +170,9 @@ class ChatStore {
       this.touchSession(id);
     }
     this.saveSettings();
+    
+    // Send config update message if connected
+    this.sendConfigUpdateMessage("sessionId", id);
   };
 
   @action
@@ -174,6 +180,9 @@ class ChatStore {
     this.uid = uid;
     this.wsService.setUid(uid);
     this.saveSettings();
+    
+    // Send config update message if connected
+    this.sendConfigUpdateMessage("uid", uid);
   };
 
   @action
@@ -189,24 +198,36 @@ class ChatStore {
       this.peerKind = "";
     }
     this.saveSettings();
+    
+    // Send config update message if connected
+    this.sendConfigUpdateMessage("peerKind", this.peerKind);
   };
 
   @action
   setPeerId = (peerId: string) => {
     this.peerId = peerId;
     this.saveSettings();
+    
+    // Send config update message if connected
+    this.sendConfigUpdateMessage("peerId", peerId);
   };
 
   @action
   setTopicId = (topicId: string) => {
     this.topicId = topicId;
     this.saveSettings();
+    
+    // Send config update message if connected
+    this.sendConfigUpdateMessage("topicId", topicId);
   };
 
   @action
   setThreadId = (threadId: string) => {
     this.threadId = threadId;
     this.saveSettings();
+    
+    // Send config update message if connected
+    this.sendConfigUpdateMessage("threadId", threadId);
   };
 
   @action
@@ -401,6 +422,28 @@ class ChatStore {
 
     this.wsService.onMessage((data: any) => {
       // console.log("Received message:", data);
+
+      // Handle system ready message from server
+      if (data.type === "system.ready") {
+        console.log("Server ready message received");
+        if (!this.serverReady) {
+          this.serverReady = true;
+          // If we were waiting to request session list, do it now
+          if (this.pendingSessionListRequest) {
+            this.pendingSessionListRequest = false;
+            this.doSessionListRequest();
+          }
+        }
+        return;
+      }
+
+      // Handle config update messages (from other clients)
+      if (data.type === "config.update") {
+        console.log("Config update received:", data.config);
+        // Handle config updates from other clients if needed
+        // For now, just log them
+        return;
+      }
 
       // Handle OpenClaw event messages
       if (data.type === "event") {
@@ -811,6 +854,34 @@ class ChatStore {
       id,
       updatedAt,
     }));
+  };
+
+  /**
+   * Send configuration update message to server
+   * This notifies the server when client configuration changes
+   */
+  private sendConfigUpdateMessage = (field: string, value: any) => {
+    // Only send if connected
+    if (!this.connected) {
+      return;
+    }
+
+    try {
+      const message = {
+        type: "config.update",
+        timestamp: Date.now(),
+        config: {
+          field,
+          value,
+        },
+      };
+
+      this.wsService.send(message).catch((err) => {
+        console.error("Failed to send config update message:", err);
+      });
+    } catch (error) {
+      console.error("Error preparing config update message:", error);
+    }
   };
 }
 

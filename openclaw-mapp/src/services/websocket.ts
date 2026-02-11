@@ -99,6 +99,10 @@ export class WebSocketService {
             this.reconnectTimer = null;
           }
           this.notifyStatus("connected");
+          
+          // Send connection established message
+          this.sendConnectionMessage();
+          
           if (this.connectResolve) {
             this.connectResolve();
             this.connectResolve = null;
@@ -211,6 +215,34 @@ export class WebSocketService {
 
   isConnected(): boolean {
     return this.connectionState === "connected";
+  }
+
+  /**
+   * Send a connection established message to server
+   * This notifies the server that the client is ready
+   */
+  private sendConnectionMessage(): void {
+    try {
+      const message = {
+        type: "system.connected",
+        clientInfo: {
+          platform: "wechat-miniprogram",
+          timestamp: Date.now(),
+          uid: this.uid || "unknown",
+        },
+      };
+      
+      // Send after a short delay to ensure connection is stable
+      setTimeout(() => {
+        if (this.connectionState === "connected") {
+          this.send(message).catch((err) => {
+            console.error("Failed to send connection message:", err);
+          });
+        }
+      }, 100);
+    } catch (error) {
+      console.error("Error preparing connection message:", error);
+    }
   }
 }
 
