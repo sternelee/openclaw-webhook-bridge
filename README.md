@@ -222,6 +222,29 @@ The bridge correctly handles these OpenClaw Gateway events:
 - **event**: System events (ticket, heartbeat, heart, etc.)
 - Other event types are passed through with logging
 
+### Connection and Configuration Messages
+
+The system supports special message types for connection lifecycle and configuration synchronization. See [MESSAGE_EVENTS.md](MESSAGE_EVENTS.md) for details.
+
+**System Messages**:
+- `system.connected` - Client connection established
+- `system.ready` - Server ready to receive messages  
+- `config.update` - Configuration settings changed
+
+These messages enable:
+- Connection lifecycle tracking
+- Multi-client configuration sync
+- Server readiness detection
+- Debugging and monitoring
+
+## Documentation
+
+- [CLAUDE.md](CLAUDE.md) - AI agent guidance and project structure
+- [COMMANDS.md](COMMANDS.md) - Slash commands feature
+- [SESSION_CONTROL.md](SESSION_CONTROL.md) - Session control protocol
+- [MESSAGE_EVENTS.md](MESSAGE_EVENTS.md) - Connection and config messages
+- [RUST_README.md](RUST_README.md) - Rust implementation guide
+
 ## Contributing
 
 Issues and Pull Requests are welcome!

@@ -222,6 +222,29 @@ Bridge 正确处理以下 OpenClaw Gateway 事件：
 - **event**: 系统事件（ticket, heartbeat, heart 等）
 - 其他事件类型会透传并记录日志
 
+### 连接和配置消息
+
+系统支持特殊的消息类型用于连接生命周期和配置同步。详见 [MESSAGE_EVENTS.md](MESSAGE_EVENTS.md)。
+
+**系统消息**:
+- `system.connected` - 客户端连接已建立
+- `system.ready` - 服务器准备接收消息
+- `config.update` - 配置设置已更改
+
+这些消息实现了：
+- 连接生命周期跟踪
+- 多客户端配置同步
+- 服务器就绪检测
+- 调试和监控
+
+## 文档
+
+- [CLAUDE.md](CLAUDE.md) - AI 代理指南和项目结构
+- [COMMANDS.md](COMMANDS.md) - 斜杠命令功能
+- [SESSION_CONTROL.md](SESSION_CONTROL.md) - 会话控制协议
+- [MESSAGE_EVENTS.md](MESSAGE_EVENTS.md) - 连接和配置消息
+- [RUST_README.md](RUST_README.md) - Rust 实现指南
+
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！
