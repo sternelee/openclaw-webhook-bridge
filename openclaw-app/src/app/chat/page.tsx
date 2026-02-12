@@ -279,7 +279,7 @@ export default function ChatPage() {
                     </p>
                     <Button
                       variant="default"
-                      onClick={() => router.push("/config")}
+                      onClick={() => router.push("/settings")}
                     >
                       Go to Settings
                     </Button>
