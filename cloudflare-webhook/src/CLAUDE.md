@@ -8,4 +8,11 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #1095 | 12:19 PM | 🔵 | Discovered Cloudflare Durable Object WebSocket hub implementation | ~345 |
+
+### Feb 14, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #1694 | 11:37 PM | ✅ | Cloudflare Workers WebSocketHub enhanced with detailed logging | ~312 |
+| #1688 | 11:26 PM | ✅ | Cloudflare Workers WebSocket hub enhanced with message logging | ~249 |
 </claude-mem-context>

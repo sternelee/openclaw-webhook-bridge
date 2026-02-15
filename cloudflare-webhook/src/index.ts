@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { WebSocketHub } from "./websocket-hub";
 
-// Export the Durable Object class for wrangler.toml
+// Export Durable Object class for wrangler.toml
 export { WebSocketHub };
 
 // Environment with Durable Object binding
@@ -26,7 +26,7 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// WebSocket route - requires ?uid=xxx query parameter
+// WebSocket route with UID in query parameter - /ws?uid=xxx
 app.get("/ws", async (c) => {
   if (c.req.header("upgrade") !== "websocket") {
     return c.text("Expected Upgrade: websocket", 426);
@@ -46,24 +46,18 @@ app.get("/ws/:uid", async (c) => {
   return stub.fetch(c.req.raw);
 });
 
-// Health check endpoint with test page
+// Test page (root)
 app.get("/", (c) => {
   return c.html(getTestPage());
 });
 
-// Stats endpoint
+// Stats endpoint (includes health check data)
 app.get("/stats", async (c) => {
   const stub = c.get("hub");
   return stub.fetch(c.req.raw);
 });
 
-// Health check endpoint
-app.get("/health", async (c) => {
-  const stub = c.get("hub");
-  return stub.fetch(c.req.raw);
-});
-
-// Broadcast endpoint - can be called from bridge to send messages to all clients
+// Broadcast endpoint - can be called from bridge to send messages to clients
 app.post("/broadcast", async (c) => {
   const body = (await c.req.json()) as Record<string, unknown>;
   const stub = c.get("hub");
@@ -83,32 +77,20 @@ function getTestPage(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenClaw Webhook - WebSocket Test (Hono + Durable Objects)</title>
+  <title>OpenClaw Webhook - WebSocket Test</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      background: #0f172a;
+      color: #e2e8f0;
       min-height: 100vh;
       padding: 20px;
-      color: #eee;
     }
     .container { max-width: 800px; margin: 0 auto; }
-    h1 { text-align: center; margin-bottom: 20px; color: #4ade80; }
-    .do-badge {
-      text-align: center;
-      margin-bottom: 20px;
-      padding: 8px 16px;
-      background: rgba(99, 102, 241, 0.2);
-      border: 1px solid #6366f1;
-      border-radius: 20px;
-      display: inline-block;
-      margin-left: 50%;
-      transform: translateX(-50%);
-    }
-    .do-badge span { color: #a5b4fc; font-size: 0.875rem; }
+    h1 { text-align: center; margin-bottom: 20px; color: #22c55e; }
     .status {
-      background: rgba(255,255,255,0.1);
+      background: #1e293b;
       padding: 15px;
       border-radius: 8px;
       margin-bottom: 20px;
@@ -124,24 +106,24 @@ function getTestPage(): string {
     }
     .status-dot.connected { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
     .panel {
-      background: rgba(255,255,255,0.05);
+      background: #1e293b;
       border-radius: 12px;
       padding: 20px;
       margin-bottom: 20px;
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid #334155;
     }
     .panel h2 { font-size: 1.2rem; margin-bottom: 15px; color: #94a3b8; }
     .input-group { display: flex; gap: 10px; margin-bottom: 15px; }
     input[type="text"] {
       flex: 1;
       padding: 12px 16px;
-      border: 1px solid rgba(255,255,255,0.2);
+      border: 1px solid #334155;
       border-radius: 8px;
-      background: rgba(255,255,255,0.1);
-      color: #fff;
+      background: #0f172a;
+      color: #e2e8f0;
       font-size: 14px;
     }
-    input:focus { outline: none; border-color: #4ade80; }
+    input:focus { outline: none; border-color: #22c55e; }
     button {
       padding: 12px 24px;
       border: none;
@@ -151,8 +133,8 @@ function getTestPage(): string {
       font-weight: 600;
       transition: all 0.2s;
     }
-    .btn-connect { background: #4ade80; color: #1a1a2e; }
-    .btn-connect:hover { background: #22c55e; }
+    .btn-connect { background: #22c55e; color: #0f172a; }
+    .btn-connect:hover { background: #16a34a; }
     .btn-connect:disabled { background: #64748b; cursor: not-allowed; }
     .btn-disconnect { background: #ef4444; color: white; }
     .btn-disconnect:hover { background: #dc2626; }
@@ -160,18 +142,19 @@ function getTestPage(): string {
     .btn-send:hover { background: #2563eb; }
     .btn-send:disabled { background: #64748b; cursor: not-allowed; }
     .messages {
-      background: rgba(0,0,0,0.3);
+      background: #0f172a;
       border-radius: 8px;
       padding: 15px;
       height: 300px;
       overflow-y: auto;
       font-family: Monaco, Menlo, monospace;
       font-size: 12px;
+      border: 1px solid #334155;
     }
-    .message { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .message { padding: 8px 0; border-bottom: 1px solid #334155; }
     .message:last-child { border-bottom: none; }
-    .message.sent { color: #4ade80; }
-    .message.received { color: #60a5fa; }
+    .message.sent { color: #22c55e; }
+    .message.received { color: #3b82f6; }
     .message.error { color: #ef4444; }
     .message.info { color: #94a3b8; }
     .message-time { color: #64748b; margin-right: 8px; }
@@ -180,7 +163,6 @@ function getTestPage(): string {
 <body>
   <div class="container">
     <h1>OpenClaw Webhook WebSocket Test</h1>
-    <div class="do-badge"><span>🔗 Hono + Cloudflare Durable Objects</span></div>
 
     <div class="status">
       <span class="status-dot" id="statusDot"></span>
@@ -208,12 +190,11 @@ function getTestPage(): string {
 
     <div class="panel">
       <h2>Messages</h2>
-      <div class="messages" id="messages"></div>
+      <div class="messages" id="messages"></"></>
     </div>
   </div>
 
   <script>
-    // Auto-detect WebSocket URL based on current page
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = wsProtocol + '//' + window.location.host + '/ws';
     document.getElementById('wsUrl').value = wsUrl;
@@ -257,13 +238,11 @@ function getTestPage(): string {
       let url = document.getElementById('wsUrl').value;
       const uid = document.getElementById('uidInput').value.trim();
 
-      // UID is now REQUIRED
       if (!uid) {
         addMessage('error', 'UID is required. Please enter a UID to connect.');
         return;
       }
 
-      // Append UID to URL
       const separator = url.includes('?') ? '&' : '?';
       url = url + separator + 'uid=' + encodeURIComponent(uid);
 
