@@ -1,7 +1,6 @@
 use anyhow::Result;
 use log::{info, warn};
 use serde::Deserialize;
-use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -102,6 +101,29 @@ impl Bridge {
     /// Handle message from webhook
     pub async fn handle_webhook_message(&self, data: Vec<u8>) -> Result<()> {
         info!("[Bridge] Webhook -> OpenClaw: {} bytes", data.len());
+
+        // Try to parse as JSON for inspection
+        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&data) {
+            let msg_type = json.get("type").and_then(|v| v.as_str());
+            info!("[Bridge] Received message type: {:?}", msg_type);
+
+            // Check for Gateway protocol request frames and forward directly
+            if msg_type == Some("req") {
+                let method = json.get("method").and_then(|v| v.as_str()).unwrap_or("?");
+                let id = json.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+                info!("[Bridge] Forwarding Gateway request: method={} id={}", method, id);
+
+                // Forward to OpenClaw Gateway
+                let openclaw = self.openclaw_client.read().await;
+                if let Some(ref client) = *openclaw {
+                    client.send_raw(data).await?;
+                    info!("[Bridge] Gateway request sent to OpenClaw");
+                } else {
+                    warn!("[Bridge] OpenClaw client not initialized");
+                }
+                return Ok(());
+            }
+        }
 
         // Check for session control messages
         if sessions::is_session_control_message(&data) {
@@ -208,153 +230,20 @@ impl Bridge {
         Ok(())
     }
 
-    /// Handle OpenClaw event
+    /// Handle OpenClaw event - forward all events directly without transformation
     pub async fn handle_openclaw_event(&self, data: Vec<u8>) {
         info!("[Bridge] OpenClaw -> Webhook: {} bytes", data.len());
 
-        // Parse event to check type
-        let event: serde_json::Value = match serde_json::from_slice(&data) {
-            Ok(e) => e,
-            Err(e) => {
-                warn!("[Bridge] Failed to parse event: {}", e);
-                self.send_to_webhook(data).await;
-                return;
-            }
-        };
-
-        // Check event format: could be "type": "event" with event name, or direct type
-        let is_event_frame = event.get("type").and_then(|v| v.as_str()) == Some("event");
-        let event_name = if is_event_frame {
-            event.get("event").and_then(|v| v.as_str())
+        // Parse event for logging only
+        if let Ok(event) = serde_json::from_slice::<serde_json::Value>(&data) {
+            let event_type = event.get("type").and_then(|v| v.as_str());
+            info!("[Bridge] Forwarding event type: {:?}", event_type);
         } else {
-            event.get("type").and_then(|v| v.as_str())
-        };
-
-        // Log important events for debugging
-        if let Some(name) = event_name {
-            match name {
-                "ticket" | "heartbeat" | "heart" => {
-                    info!("[Bridge] Received event: {}", name);
-                }
-                _ => {}
-            }
+            warn!("[Bridge] Failed to parse event, forwarding as-is");
         }
 
-        // Skip internal lifecycle events that are too noisy
-        if let Some(name) = event_name {
-            if matches!(name, "tick" | "lifecycle" | "presence" | "health") {
-                return;
-            }
-        }
-
-        // Convert to webhook format
-        if let Some(converted) = self.convert_event_to_webhook_format(&event) {
-            self.send_to_webhook(converted).await;
-        }
-    }
-
-    /// Convert OpenClaw event to webhook format
-    fn convert_event_to_webhook_format(&self, event: &serde_json::Value) -> Option<Vec<u8>> {
-        let event_type = event.get("type")?.as_str()?;
-
-        match event_type {
-            // Handle event frame format: { type: "event", event: "ticket", payload: {...} }
-            "event" => {
-                let event_name = event.get("event")?.as_str()?;
-                // Convert event frame to a simpler format for webhook
-                let response = json!({
-                    "type": "event",
-                    "event": event_name,
-                    "payload": event.get("payload"),
-                    "seq": event.get("seq"),
-                });
-                serde_json::to_vec(&response).ok()
-            }
-            "agent" => {
-                let stream = event.get("stream")?.as_str()?;
-                let session_key = event.get("sessionKey")?.as_str()?;
-
-                match stream {
-                    "lifecycle" => {
-                        let phase = event.get("data")?.get("phase")?.as_str()?;
-                        if matches!(phase, "end" | "complete") {
-                            let response = json!({
-                                "type": "complete",
-                                "content": "",
-                                "session": session_key,
-                            });
-                            return serde_json::to_vec(&response).ok();
-                        }
-                        None
-                    }
-                    "assistant" => {
-                        let text = event.get("data")?.get("text")?.as_str()?;
-                        if !text.is_empty() {
-                            let response = json!({
-                                "type": "progress",
-                                "content": text,
-                                "session": session_key,
-                            });
-                            return serde_json::to_vec(&response).ok();
-                        }
-                        None
-                    }
-                    "tool" => None, // Skip tool stream
-                    _ => None,
-                }
-            }
-            "chat" => {
-                let state = event.get("state")?.as_str()?;
-                let session_key = event.get("sessionKey")?.as_str()?;
-
-                // Extract text from content array
-                let mut text = String::new();
-                if let Some(message) = event.get("message") {
-                    if let Some(content) = message.get("content").and_then(|v| v.as_array()) {
-                        for item in content {
-                            if item.get("type")?.as_str()? == "text" {
-                                if let Some(t) = item.get("text").and_then(|v| v.as_str()) {
-                                    text.push_str(t);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                match state {
-                    "final" => {
-                        let response = json!({
-                            "type": "complete",
-                            "content": text,
-                            "session": session_key,
-                        });
-                        serde_json::to_vec(&response).ok()
-                    }
-                    "delta" if !text.is_empty() => {
-                        let response = json!({
-                            "type": "progress",
-                            "content": text,
-                            "session": session_key,
-                        });
-                        serde_json::to_vec(&response).ok()
-                    }
-                    "error" => {
-                        let response = json!({
-                            "type": "error",
-                            "content": "An error occurred",
-                            "session": session_key,
-                        });
-                        serde_json::to_vec(&response).ok()
-                    }
-                    _ => None,
-                }
-            }
-            // Pass through all other event types unchanged
-            _ => {
-                info!("[Bridge] Passthrough event type: {}", event_type);
-                serde_json::to_vec(event).ok()
-            }
-        }
+        // Forward all events directly without any modification or filtering
+        self.send_to_webhook(data).await;
     }
 
     /// Send data to webhook

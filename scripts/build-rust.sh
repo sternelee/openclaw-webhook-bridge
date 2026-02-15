@@ -1,11 +1,11 @@
 #!/bin/bash
-# Build script for openclaw-bridge-rust
+# Build script for openclaw-bridge
 
 set -e
 
 VERSION=${VERSION:-"0.1.0"}
 OUTPUT_DIR="dist-rust"
-BINARY_NAME="openclaw-bridge-rust"
+BINARY_NAME="openclaw-bridge"
 
 echo "Building OpenClaw Bridge (Rust) v${VERSION}"
 echo "Output directory: ${OUTPUT_DIR}"
@@ -37,29 +37,29 @@ if command -v cross &> /dev/null; then
     # Linux AMD64
     echo "Building for Linux AMD64..."
     cross build ${BUILD_FLAGS} --target x86_64-unknown-linux-gnu
-    cp target/x86_64-unknown-linux-gnu/*/openclaw-bridge-rust "${OUTPUT_DIR}/${BINARY_NAME}-linux-amd64"
+    cp target/x86_64-unknown-linux-gnu/*/openclaw-bridge "${OUTPUT_DIR}/${BINARY_NAME}-linux-amd64"
     
     # Linux ARM64
     echo "Building for Linux ARM64..."
     cross build ${BUILD_FLAGS} --target aarch64-unknown-linux-gnu
-    cp target/aarch64-unknown-linux-gnu/*/openclaw-bridge-rust "${OUTPUT_DIR}/${BINARY_NAME}-linux-arm64"
+    cp target/aarch64-unknown-linux-gnu/*/openclaw-bridge "${OUTPUT_DIR}/${BINARY_NAME}-linux-arm64"
     
     # macOS AMD64
     if [ "$(uname)" = "Darwin" ]; then
         echo "Building for macOS AMD64..."
         cargo build ${BUILD_FLAGS} --target x86_64-apple-darwin
-        cp target/x86_64-apple-darwin/*/openclaw-bridge-rust "${OUTPUT_DIR}/${BINARY_NAME}-darwin-amd64"
+        cp target/x86_64-apple-darwin/*/openclaw-bridge "${OUTPUT_DIR}/${BINARY_NAME}-darwin-amd64"
         
         # macOS ARM64
         echo "Building for macOS ARM64..."
         cargo build ${BUILD_FLAGS} --target aarch64-apple-darwin
-        cp target/aarch64-apple-darwin/*/openclaw-bridge-rust "${OUTPUT_DIR}/${BINARY_NAME}-darwin-arm64"
+        cp target/aarch64-apple-darwin/*/openclaw-bridge "${OUTPUT_DIR}/${BINARY_NAME}-darwin-arm64"
     fi
     
     # Windows AMD64
     echo "Building for Windows AMD64..."
     cross build ${BUILD_FLAGS} --target x86_64-pc-windows-gnu
-    cp target/x86_64-pc-windows-gnu/*/openclaw-bridge-rust.exe "${OUTPUT_DIR}/${BINARY_NAME}-windows-amd64.exe"
+    cp target/x86_64-pc-windows-gnu/*/openclaw-bridge.exe "${OUTPUT_DIR}/${BINARY_NAME}-windows-amd64.exe"
     
     echo "✓ All cross-platform builds completed"
 else

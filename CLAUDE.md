@@ -243,10 +243,13 @@ The web app is built with Next.js 16 and React 19, designed for deployment on Cl
 
 - **Framework**: Next.js 16 with React 19 and TypeScript
 - **Deployment**: OpenNext for Cloudflare Workers (`@opennextjs/cloudflare`)
+- **State Management**: Zustand (`src/store/use-app-store.ts`)
 - **Styling**: Tailwind CSS v4 with Radix UI components
+- **Pages** (simplified structure):
+  - `src/app/chat/page.tsx` - Main chat interface with streaming support
+  - `src/app/settings/page.tsx` - Gateway configuration
+  - `src/app/page.tsx` - Redirects to `/chat`
 - **Key Files**:
-  - `src/app/layout.tsx` - Root layout
-  - `src/app/page.tsx` - Home page
   - `open-next.config.ts` - OpenNext configuration
   - `wrangler.jsonc` - Cloudflare configuration
 

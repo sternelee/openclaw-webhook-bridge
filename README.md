@@ -55,14 +55,9 @@ OpenClaw is an AI Agent Gateway system. openclaw-run is the official bridge impl
 ### openclaw-app Features
 
 - **Mobile-optimized**: Responsive design, touch-friendly, safe area insets
-- **Feature Pages**:
-  - Chat - Streaming conversation interface
-  - Sessions - Session management
-  - Channels - Channel configuration (WhatsApp, Nostr, Telegram, etc.)
-  - Nodes - Device and node management
-  - Config - Configuration editing (form/JSON5)
-  - Debug - RPC calls and event logs
-  - Overview - Connection status overview
+- **Core Pages**:
+  - Chat - Streaming conversation interface with session management
+  - Settings - Gateway URL and connection configuration
 
 ## Quick Start
 

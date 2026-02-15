@@ -15,7 +15,7 @@ use tokio::signal;
 use config::{load_or_prompt_uid, load_or_prompt_webhook_url};
 
 #[derive(Parser)]
-#[command(name = "openclaw-bridge-rust")]
+#[command(name = "openclaw-bridge")]
 #[command(about = "Bridge between WebSocket webhooks and OpenClaw AI Gateway", long_about = None)]
 struct Cli {
     #[command(subcommand)]
