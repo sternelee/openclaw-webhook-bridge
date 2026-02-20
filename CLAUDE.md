@@ -75,6 +75,14 @@ The Bridge consists of five main components:
 
 The UID is mandatory for routing - auto-generated UUID v4 if not provided.
 
+### Rust Code Style
+
+- **Formatting**: `rustfmt` (4 spaces, standard Rust style)
+- **Error handling**: Use `anyhow::Result` for application code, `thiserror` for libraries, propagate with `?`
+- **Async**: `tokio` runtime, use `async/await`, propagate cancellation via `tokio::select!`
+- **Logging**: `log` crate with component prefixes: `[Bridge]`, `[Webhook]`, `[OpenClaw]`, `[Session]`
+- **IMPORTANT**: Never log message content (privacy) - log receipt only
+
 ### Build Commands
 
 ```bash
@@ -110,6 +118,9 @@ cd src/sessions && cargo test
 
 # Show test output
 cargo test -- --nocapture
+
+# Fast syntax/type check
+cargo check
 ```
 
 ### Logging
@@ -136,6 +147,12 @@ The webhook service is built with Cloudflare Workers and Durable Objects, provid
   - Uses `state.acceptWebSocket()` and `state.getWebSockets()` for hibernation
   - Broadcasts messages from clients to other clients with the same UID (multi-client sync)
 
+### TypeScript Code Style (Cloudflare Workers)
+
+- Strict mode enabled, ES2022, 2 spaces, semicolons
+- Export `interface Env` for Durable Object bindings
+- Type-safe Hono routing: `Hono<{ Bindings: Env }>()`
+
 ### Webhook Build Commands
 
 ```bash
@@ -161,6 +178,9 @@ wrangler tail
 
 # Type check
 tsc --noEmit
+
+# Run tests
+pnpm test
 ```
 
 ### Webhook Configuration
@@ -180,6 +200,9 @@ The mini-program is built with Taro (React-based framework) for WeChat, providin
 
 - **Framework**: Taro 4.x with React 18 and TypeScript
 - **State Management**: MobX 4.x with `@observable` and `@action` decorators
+- **Target**: ES2017 (WeChat compatibility), `jsx: react-jsx`
+- **TypeScript**: `strict: false` (legacy Taro compatibility)
+- **Path Alias**: Use `@/` alias for `./src/*`
 - **Pages**:
   - `pages/chat/index.tsx` - Main chat interface with streaming support
   - `pages/settings/index.tsx` - Server configuration (wsUrl, uid)
@@ -253,6 +276,13 @@ The web app is built with Next.js 16 and React 19, designed for deployment on Cl
   - `open-next.config.ts` - OpenNext configuration
   - `wrangler.jsonc` - Cloudflare configuration
 
+### TypeScript/React Code Style (openclaw-app)
+
+- Next.js 16 with React 19, App Router
+- Zustand for state management (`use-app-store.ts`)
+- Tailwind CSS v4 with Radix UI components
+- Deployed via OpenNext for Cloudflare Workers
+
 ### Web App Build Commands
 
 ```bash
@@ -296,7 +326,7 @@ For local testing without Cloudflare, use the Node.js webhook server:
 ```bash
 cd node-webhook
 npm install
-npm start
+npm start    # Starts on localhost:8787
 ```
 
 Then connect the bridge to `ws://localhost:8787/ws`. A test page is available at `http://localhost:8787`.
@@ -371,6 +401,14 @@ This design allows multiple bridges and multiple clients to connect to the same 
 - **Mandatory UID routing**: The bridge requires a UID (unique identifier) to append as a query parameter when connecting to the webhook server (`?uid=...`). This allows webhook servers to distinguish between multiple bridge instances. If not provided in config, a UUID v4 is auto-generated and saved.
 
 - **Persistent connections with auto-reconnect**: Both WebSocket clients (webhook and OpenClaw) run connection loops with exponential backoff reconnection delays. The bridge survives temporary network failures.
+
+## Key Conventions
+
+- **UID Routing**: All WebSocket connections MUST include `?uid=xxx` query param
+- **Session Isolation**: Each session key maintains independent context
+- **Secrets**: Never commit tokens/API keys - use env vars or config files (`~/.openclaw/`)
+- **Concurrency**: Use `tokio::sync` (Rust) for shared state
+- **WebSocket Reconnect**: Exponential backoff 2s → 4s → 8s → max 30s
 
 ## File Structure Reference
 

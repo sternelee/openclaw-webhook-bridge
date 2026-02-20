@@ -12,7 +12,7 @@ use log::info;
 use std::sync::Arc;
 use tokio::signal;
 
-use config::{load_or_prompt_uid, load_or_prompt_webhook_url};
+use config::{config_dir, load_or_prompt_uid, load_or_prompt_webhook_url};
 
 #[derive(Parser)]
 #[command(name = "openclaw-bridge")]
@@ -240,12 +240,16 @@ async fn run_bridge() -> Result<()> {
     bridge.set_session_store(Arc::clone(&session_store)).await;
     bridge.set_session_scope(session_scope).await;
 
+    // Get config directory for device identity
+    let config_dir = config_dir()?;
+
     // Create OpenClaw client
     let mut openclaw_client = openclaw::Client::new(
         cfg.openclaw.gateway_port,
         cfg.openclaw.gateway_token.clone(),
         cfg.openclaw.agent_id.clone(),
-    );
+        &config_dir,
+    )?;
 
     // Set event callback
     let bridge_clone = Arc::clone(&bridge);

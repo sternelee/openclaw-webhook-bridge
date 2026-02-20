@@ -13,6 +13,7 @@ use crate::webhook;
 #[derive(Debug, Deserialize)]
 pub struct WebhookMessage {
     pub id: String,
+    #[serde(default)]
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
@@ -107,24 +108,37 @@ impl Bridge {
             let msg_type = json.get("type").and_then(|v| v.as_str());
             info!("[Bridge] Received message type: {:?}", msg_type);
 
-            // Check for Gateway protocol request frames and forward directly
-            if msg_type == Some("req") {
-                let method = json.get("method").and_then(|v| v.as_str()).unwrap_or("?");
-                let id = json.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                info!(
-                    "[Bridge] Forwarding Gateway request: method={} id={}",
-                    method, id
-                );
+            // Skip non-user messages (OpenClaw events, control frames, etc.)
+            // Only messages without a "type" field or with user-defined types should proceed
+            if let Some(t) = msg_type {
+                match t {
+                    // Gateway protocol request - forward directly
+                    "req" => {
+                        let method = json.get("method").and_then(|v| v.as_str()).unwrap_or("?");
+                        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+                        info!(
+                            "[Bridge] Forwarding Gateway request: method={} id={}",
+                            method, id
+                        );
 
-                // Forward to OpenClaw Gateway
-                let openclaw = self.openclaw_client.read().await;
-                if let Some(ref client) = *openclaw {
-                    client.send_raw(data).await?;
-                    info!("[Bridge] Gateway request sent to OpenClaw");
-                } else {
-                    warn!("[Bridge] OpenClaw client not initialized");
+                        let openclaw = self.openclaw_client.read().await;
+                        if let Some(ref client) = *openclaw {
+                            client.send_raw(data).await?;
+                            info!("[Bridge] Gateway request sent to OpenClaw");
+                        } else {
+                            warn!("[Bridge] OpenClaw client not initialized");
+                        }
+                        return Ok(());
+                    }
+                    // OpenClaw events and control messages - skip entirely
+                    "res" | "event" | "connected" | "error" | "progress" | "complete" => {
+                        info!("[Bridge] Skipping non-user message: type={}", t);
+                        return Ok(());
+                    }
+                    _ => {
+                        // Other typed messages - let them through for further parsing
+                    }
                 }
-                return Ok(());
             }
         }
 

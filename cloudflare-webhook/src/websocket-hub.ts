@@ -3,29 +3,15 @@ export interface Env {
   WEBSOCKET_HUB: DurableObjectNamespace;
 }
 
-// Connection metadata stored in WebSocket attachment
-interface ConnectionAttachment {
-  uid: string;
-  connectedAt: number;
-  lastPingAt: number;
-}
-
-// Extended DurableObjectState with WebSocket attachment methods
-// These methods are available in Cloudflare Workers runtime but may not be in types
-interface ExtendedDurableObjectState extends DurableObjectState {
-  getWebSocketAttachment(ws: WebSocket): unknown;
-  setWebSocketAttachment(ws: WebSocket, attachment: unknown): void;
-}
-
 // Durable Object for managing WebSocket connections
-// Following the Fiberplane pattern for Hono + Durable Objects + WebSocket Hibernation
+// Uses in-memory state for connection tracking (works with hibernation)
 export class WebSocketHub {
   // Map of UID -> Set of connections for that UID
   private connectionsByUID: Map<string, Set<WebSocket>> = new Map();
-  // Also maintain a reverse lookup for WebSocket -> UID
+  // Reverse lookup for WebSocket -> UID
   private uidByConnection: Map<WebSocket, string> = new Map();
-  // Storage for the Durable Object state (WebSocket hibernation API)
-  readonly #state: ExtendedDurableObjectState;
+  // Track connection timestamps in memory (for heartbeat)
+  private connectionTimestamps: Map<WebSocket, number> = new Map();
 
   // Configuration constants
   private readonly HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
@@ -33,49 +19,17 @@ export class WebSocketHub {
   private readonly MAX_CONNECTIONS_PER_UID = 10;
   private readonly GLOBAL_MAX_CONNECTIONS = 1000;
 
-  constructor(state: DurableObjectState, _env: Env) {
-    this.#state = state as ExtendedDurableObjectState;
-
-    // IMPORTANT: Restore WebSocket connections after hibernation
-    // getWebSockets() returns the server sockets that were passed to acceptWebSocket()
-    const websockets = this.#state.getWebSockets();
-    for (const ws of websockets) {
-      // CRITICAL: Restore UID from WebSocket attachment (stored in DO storage)
-      const attachment = this.#state.getWebSocketAttachment(ws) as
-        | ConnectionAttachment
-        | undefined;
-      if (attachment?.uid) {
-        this.addToConnections(ws, attachment.uid);
-        // Update last seen timestamp
-        attachment.lastPingAt = Date.now();
-        this.#state.setWebSocketAttachment(ws, attachment);
-      } else {
-        // No attachment found, close the connection
-        console.warn(
-          "[WebSocketHub] Closing connection without UID attachment after hibernation",
-        );
-        try {
-          ws.close(1000, "Session expired - please reconnect");
-        } catch {}
-      }
-    }
-
-    // Only log if there are actual connections
-    const totalConnections = this.uidByConnection.size;
-    if (totalConnections > 0) {
-      console.log(
-        `[WebSocketHub] Awake from hibernation, restored ${totalConnections} connections`,
-      );
-    }
-
+  constructor(
+    readonly state: DurableObjectState,
+    readonly env: Env,
+  ) {
     // Start heartbeat interval
     this.startHeartbeat();
   }
 
   // Start heartbeat interval to detect dead connections
   private startHeartbeat(): void {
-    // Use setInterval for heartbeat (runs even during hibernation wakeups)
-    const heartbeatInterval = setInterval(() => {
+    setInterval(() => {
       this.cleanupDeadConnections();
     }, this.HEARTBEAT_INTERVAL_MS);
   }
@@ -86,13 +40,8 @@ export class WebSocketHub {
     const deadConnections: WebSocket[] = [];
 
     for (const [ws] of this.uidByConnection.entries()) {
-      const attachment = this.#state.getWebSocketAttachment(ws) as
-        | ConnectionAttachment
-        | undefined;
-      if (
-        attachment &&
-        now - attachment.lastPingAt > this.HEARTBEAT_TIMEOUT_MS
-      ) {
+      const connectedAt = this.connectionTimestamps.get(ws);
+      if (connectedAt && now - connectedAt > this.HEARTBEAT_TIMEOUT_MS) {
         deadConnections.push(ws);
       }
     }
@@ -127,6 +76,7 @@ export class WebSocketHub {
         }
       }
       this.uidByConnection.delete(ws);
+      this.connectionTimestamps.delete(ws);
     }
   }
 
@@ -154,9 +104,8 @@ export class WebSocketHub {
   }
 
   // Handle WebSocket upgrade requests
-  private async handleWebSocketUpgrade(url: URL): Promise<Response> {
+  private handleWebSocketUpgrade(url: URL): Response {
     // Extract UID from query parameter or path
-    // Support both: /ws?uid=xxx and /ws/xxx
     let uid = url.searchParams.get("uid") || "";
 
     // Also check path pattern /ws/:uid
@@ -208,19 +157,19 @@ export class WebSocketHub {
     const [client, server] = Object.values(websocketPair);
 
     // Use acceptWebSocket() for hibernation support
-    this.#state.acceptWebSocket(server);
+    // Note: In-memory state persists across hibernation in Cloudflare Workers
+    this.state.acceptWebSocket(server);
 
-    // Store connection metadata in WebSocket attachment (persists across hibernation)
+    // Store connection metadata in memory
     const now = Date.now();
-    const attachment: ConnectionAttachment = {
-      uid,
-      connectedAt: now,
-      lastPingAt: now,
-    };
-    this.#state.setWebSocketAttachment(server, attachment);
+    this.connectionTimestamps.set(server, now);
 
     // Map it to the UID for routing
     this.addToConnections(server, uid);
+
+    console.log(
+      `[WebSocketHub] New connection: UID=${uid}, total=${this.uidByConnection.size}`,
+    );
 
     // Return the client socket to establish the connection
     return new Response(null, {
@@ -245,7 +194,7 @@ export class WebSocketHub {
         });
       }
 
-      // Fallback: broadcast to all (backward compatibility)
+      // Fallback: broadcast to all
       const msgStr = JSON.stringify(body);
       const sentCount = this.broadcastToAll(msgStr);
       return Response.json({
@@ -263,9 +212,8 @@ export class WebSocketHub {
     }
   }
 
-  // Handle stats endpoint (includes health check data)
+  // Handle stats endpoint
   private handleStats(): Response {
-    // Count connections per UID
     const connectionsByUID: Record<string, number> = {};
     for (const [uid, connections] of this.connectionsByUID.entries()) {
       connectionsByUID[uid] = connections.size;
@@ -279,20 +227,14 @@ export class WebSocketHub {
     });
   }
 
-  // WebSocket message handler - called when client sends a message
+  // WebSocket message handler
   webSocketMessage(ws: WebSocket, data: string | ArrayBuffer) {
     try {
       const uid = this.uidByConnection.get(ws);
       const messageStr = data as string;
 
-      // Update last ping timestamp
-      const attachment = this.#state.getWebSocketAttachment(ws) as
-        | ConnectionAttachment
-        | undefined;
-      if (attachment) {
-        attachment.lastPingAt = Date.now();
-        this.#state.setWebSocketAttachment(ws, attachment);
-      }
+      // Update last ping timestamp in memory
+      this.connectionTimestamps.set(ws, Date.now());
 
       // Log message type for debugging
       try {
@@ -300,7 +242,9 @@ export class WebSocketHub {
         const connectionsCount =
           this.connectionsByUID.get(uid || "")?.size || 0;
         console.log(
-          `[WebSocketHub] Message from UID=${uid}: type=${json.type || json.event || "unknown"}, connections: ${connectionsCount}`,
+          `[WebSocketHub] Message from UID=${uid}: type=${
+            json.type || json.event || "unknown"
+          }, connections: ${connectionsCount}`,
         );
       } catch {
         console.log(`[WebSocketHub] Message from UID=${uid}: (non-JSON)`);
@@ -318,17 +262,18 @@ export class WebSocketHub {
     }
   }
 
-  // WebSocket close handler - called when connection closes
+  // WebSocket close handler
   webSocketClose(
-    ws: WebSocket,
+    _ws: WebSocket,
     _code: number,
     _reason: string,
     _wasClean: boolean,
   ) {
-    this.removeFromConnections(ws);
+    console.log("[WebSocketHub] Connection closed");
+    this.removeFromConnections(_ws);
   }
 
-  // WebSocket error handler - called when error occurs
+  // WebSocket error handler
   webSocketError(ws: WebSocket, error: unknown) {
     const uid = this.uidByConnection.get(ws);
     console.error(`[WebSocketHub] WebSocket error for UID=${uid}:`, error);
