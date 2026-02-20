@@ -55,6 +55,8 @@ export default function ChatPage() {
     loadChatHistory,
     removeFromQueue,
     getLocalSessions,
+    sessions: gatewaySessions,
+    sessionsLoading,
   } = useAppStore();
 
   // Load settings and connect on mount
@@ -147,8 +149,48 @@ export default function ChatPage() {
     switchSession(key);
   };
 
-  // Get sessions list
+  // Get sessions list - merge local and gateway sessions
   const localSessions = getLocalSessions();
+
+  // Build combined sessions list from local and gateway
+  const combinedSessions = (() => {
+    const sessionMap = new Map<string, { key: string; label: string | null; messageCount?: number; updatedAt?: number }>();
+
+    // Add local sessions first
+    for (const s of localSessions) {
+      sessionMap.set(s.key, s);
+    }
+
+    // Merge gateway sessions (these have more metadata)
+    if (gatewaySessions?.sessions) {
+      for (const s of gatewaySessions.sessions) {
+        const existing = sessionMap.get(s.key);
+        if (existing) {
+          // Update with gateway metadata
+          sessionMap.set(s.key, {
+            key: s.key,
+            label: s.label || s.displayName || existing.label,
+            messageCount: s.totalTokens ? undefined : existing.messageCount,
+            updatedAt: s.updatedAt || existing.updatedAt,
+          });
+        } else {
+          // Add new gateway session
+          sessionMap.set(s.key, {
+            key: s.key,
+            label: s.label || s.displayName || null,
+            updatedAt: s.updatedAt || undefined,
+          });
+        }
+      }
+    }
+
+    // Convert to array and sort by updatedAt (newest first)
+    return Array.from(sessionMap.values()).sort((a, b) => {
+      if (!a.updatedAt) return 1;
+      if (!b.updatedAt) return -1;
+      return b.updatedAt - a.updatedAt;
+    });
+  })();
 
   // Header leading content (title and session selector)
   const headerLeadingContent = (
@@ -156,10 +198,10 @@ export default function ChatPage() {
       <h1 className="text-base md:text-lg font-semibold truncate">Chat</h1>
       <SessionSelector
         currentSessionKey={sessionKey}
-        sessions={localSessions}
+        sessions={combinedSessions}
         onSessionSwitch={handleSessionSwitch}
         onNewSession={handleNewSession}
-        loading={false}
+        loading={sessionsLoading}
       />
     </>
   );

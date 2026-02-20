@@ -57,6 +57,10 @@ impl Client {
         let connected = Arc::clone(&self.connected);
         let conn_notify = Arc::clone(&self.conn_notify);
 
+        // IMPORTANT: Register the notified() future BEFORE spawning the connection loop
+        // to avoid a race where notify_waiters() fires before we start listening.
+        let notified = self.conn_notify.notified();
+
         // Spawn connection loop
         tokio::spawn(async move {
             Self::connection_loop(
@@ -71,9 +75,9 @@ impl Client {
             .await;
         });
 
-        // Wait for initial connection
+        // Wait for initial connection (15s timeout for Cloudflare cold starts)
         tokio::select! {
-            _ = self.conn_notify.notified() => {
+            _ = notified => {
                 if self.connected.load(Ordering::SeqCst) {
                     info!("[Webhook] Connected to {} (UID: {})", self.url, self.uid);
                     Ok(())
@@ -81,7 +85,7 @@ impl Client {
                     anyhow::bail!("Failed to establish connection")
                 }
             }
-            _ = sleep(Duration::from_secs(5)) => {
+            _ = sleep(Duration::from_secs(15)) => {
                 anyhow::bail!("Timeout connecting to webhook server")
             }
         }

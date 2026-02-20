@@ -111,7 +111,10 @@ impl Bridge {
             if msg_type == Some("req") {
                 let method = json.get("method").and_then(|v| v.as_str()).unwrap_or("?");
                 let id = json.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                info!("[Bridge] Forwarding Gateway request: method={} id={}", method, id);
+                info!(
+                    "[Bridge] Forwarding Gateway request: method={} id={}",
+                    method, id
+                );
 
                 // Forward to OpenClaw Gateway
                 let openclaw = self.openclaw_client.read().await;

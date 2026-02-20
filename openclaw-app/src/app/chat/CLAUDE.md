@@ -16,4 +16,13 @@
 | #1092 | 12:14 PM | 🔴 | Fixed Next.js 16 compatibility issues and mobile header visibility | ~89 |
 | #1091 | " | 🟣 | Implemented comprehensive mobile-responsive UI and multiple pages | ~226 |
 | #1082 | 12:04 PM | 🔵 | Investigating duplicate WebSocket connection issue in openclaw-app | ~214 |
+
+### Feb 14, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #1622 | 8:57 PM | 🟣 | Session selector updated with combined session list | ~288 |
+| #1621 | " | 🟣 | Implemented sessions list merging from local and gateway | ~347 |
+| #1620 | 8:56 PM | 🟣 | Chat page updated to use gateway sessions | ~180 |
+| #1553 | 4:20 PM | 🔵 | Chat page implements streaming conversation interface | ~481 |
 </claude-mem-context>

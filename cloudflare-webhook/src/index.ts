@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { WebSocketHub } from "./websocket-hub";
 
 // Export Durable Object class for wrangler.toml
@@ -16,6 +17,27 @@ type Variables = {
 
 // Create Hono app with proper types
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// CORS middleware - allow all origins for WebSocket connections
+app.use(
+  "*",
+  cors({
+    origin: "*",
+    credentials: true,
+    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowHeaders: [
+      "Origin",
+      "Content-Type",
+      "Upgrade",
+      "Connection",
+      "Sec-WebSocket-Key",
+      "Sec-WebSocket-Version",
+      "Sec-WebSocket-Protocol",
+      "Sec-WebSocket-Extensions",
+    ],
+    exposeHeaders: ["*"],
+  }),
+);
 
 // Middleware: Create Durable Object stub and inject into context
 app.use("*", async (c, next) => {

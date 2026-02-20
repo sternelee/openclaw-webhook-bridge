@@ -271,8 +271,12 @@ export class GatewayClient {
 
     if (frame.type === "res") {
       const res = parsed as GatewayResponseFrame;
+      console.log("[gateway] Received response:", res.id, res.ok ? "ok" : "error");
       const pending = this.pending.get(res.id);
-      if (!pending) return;
+      if (!pending) {
+        console.warn("[gateway] No pending request for response id:", res.id);
+        return;
+      }
       this.pending.delete(res.id);
       if (res.ok) {
         pending.resolve(res.payload);
@@ -289,6 +293,7 @@ export class GatewayClient {
     }
     const id = generateUUID();
     const frame: GatewayRequestFrame = { type: "req", id, method, params };
+    console.log("[gateway] Sending request:", method, id);
     const p = new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: (v) => resolve(v as T), reject });
     });

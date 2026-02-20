@@ -271,19 +271,22 @@ async fn run_bridge() -> Result<()> {
     let mut webhook_client =
         webhook::Client::new(cfg.webhook_url.clone(), cfg.uid.clone(), webhook_handler);
 
+    // Connect to Webhook server FIRST (so it's ready to receive forwarded events)
+    info!("[Main] Connecting to Webhook server...");
+    webhook_client.connect().await?;
+    info!("[Main] Connected to Webhook server");
+
+    // Store webhook client in bridge before OpenClaw connects
+    // (OpenClaw events need a webhook client to forward to)
+    bridge.set_webhook_client(webhook_client).await;
+
     // Connect to OpenClaw Gateway
     info!("[Main] Connecting to OpenClaw Gateway...");
     openclaw_client.connect().await?;
     info!("[Main] Connected to OpenClaw Gateway");
 
-    // Connect to Webhook server
-    info!("[Main] Connecting to Webhook server...");
-    webhook_client.connect().await?;
-    info!("[Main] Connected to Webhook server");
-
-    // Store clients in bridge after connection
+    // Store OpenClaw client in bridge
     bridge.set_openclaw_client(openclaw_client).await;
-    bridge.set_webhook_client(webhook_client).await;
 
     info!("[Main] OpenClaw Bridge started successfully");
     info!("[Main] Press Ctrl+C to stop");

@@ -11,6 +11,7 @@ import type {
   ChatQueueItem,
   GatewayHelloOk,
   SessionsListResult,
+  SessionsPatchResult,
   PresenceEntry,
   EventLogEntry,
 } from '@/types';
@@ -243,6 +244,8 @@ export const useAppStore = create<AppState>()(
               onHello: (hello) => {
                 set({ connecting: false, hello: hello, connected: true, lastError: null });
                 console.log('[Gateway] Connected:', hello);
+                // Auto-load sessions after successful connection
+                get().loadSessions();
               },
               onEvent: (evt) => {
                 console.log('[Gateway] Event:', evt);
@@ -438,24 +441,83 @@ export const useAppStore = create<AppState>()(
 
         // Session management
         loadSessions: async () => {
+          const { client, connected, sessionsLoading } = get();
+          if (!client || !connected) {
+            console.log('[Store] Cannot load sessions: not connected');
+            return;
+          }
+          if (sessionsLoading) {
+            console.log('[Store] Sessions already loading');
+            return;
+          }
+
           set({ sessionsLoading: true, sessionsError: null });
+
+          console.log('[Store] Sending sessions.list request...');
           try {
-            // Will be implemented with actual gateway call
-            set({ sessionsLoading: false });
+            const res = await client.request<SessionsListResult | undefined>('sessions.list', {
+              activeMinutes: 1440, // Last 24 hours (1440 minutes)
+              limit: 100,
+              includeGlobal: true,
+              includeUnknown: true,
+            });
+            console.log('[Store] sessions.list response:', res);
+            if (res) {
+              set({ sessions: res, sessionsLoading: false });
+              console.log('[Store] Loaded sessions:', res.count, 'sessions');
+            } else {
+              set({ sessionsLoading: false });
+            }
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Failed to load sessions';
+            console.error('[Store] Failed to load sessions:', errorMessage);
             set({ sessionsError: errorMessage, sessionsLoading: false });
           }
         },
 
         patchSession: async (key, patch) => {
-          // Will be implemented with actual gateway call
-          console.log('[Store] Patch session:', key, patch);
+          const { client, connected } = get();
+          if (!client || !connected) {
+            console.log('[Store] Cannot patch session: not connected');
+            return;
+          }
+
+          try {
+            const params: Record<string, unknown> = { key };
+            if ('label' in patch) params.label = patch.label;
+            if ('thinkingLevel' in patch) params.thinkingLevel = patch.thinkingLevel;
+            if ('verboseLevel' in patch) params.verboseLevel = patch.verboseLevel;
+            if ('reasoningLevel' in patch) params.reasoningLevel = patch.reasoningLevel;
+
+            await client.request<SessionsPatchResult>('sessions.patch', params);
+            // Reload sessions after patch
+            await get().loadSessions();
+            console.log('[Store] Patched session:', key);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to patch session';
+            console.error('[Store] Failed to patch session:', errorMessage);
+            set({ sessionsError: errorMessage });
+          }
         },
 
         deleteSession: async (key) => {
-          // Will be implemented with actual gateway call
-          console.log('[Store] Delete session:', key);
+          const { client, connected, sessionsLoading } = get();
+          if (!client || !connected) {
+            console.log('[Store] Cannot delete session: not connected');
+            return;
+          }
+          if (sessionsLoading) return;
+
+          try {
+            await client.request('sessions.delete', { key, deleteTranscript: true });
+            // Reload sessions after delete
+            await get().loadSessions();
+            console.log('[Store] Deleted session:', key);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to delete session';
+            console.error('[Store] Failed to delete session:', errorMessage);
+            set({ sessionsError: errorMessage });
+          }
         },
 
         resetSession: () => {

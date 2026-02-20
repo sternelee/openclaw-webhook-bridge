@@ -76,28 +76,65 @@ export interface AgentEventPayload {
   errorMessage?: string;
 }
 
-/** Session entry from gateway */
+/** Session entry from gateway (matches openclaw/ui) */
 export interface GatewaySessionRow {
   key: string;
-  label: string | null;
-  kind: string;
-  updatedAt: number | null;
-  modelProvider: string | null;
-  thinkingLevel: string | null;
-  verboseLevel: string | null;
-  reasoningLevel: string | null;
-  messageCount: number;
-  totalTokens: number | null;
+  kind: "direct" | "group" | "global" | "unknown";
+  label?: string;
   displayName?: string;
+  surface?: string;
+  subject?: string;
+  room?: string;
+  space?: string;
+  updatedAt: number | null;
+  sessionId?: string;
+  systemSent?: boolean;
+  abortedLastRun?: boolean;
+  thinkingLevel?: string;
+  verboseLevel?: string;
+  reasoningLevel?: string;
+  elevatedLevel?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  model?: string;
+  modelProvider?: string;
+  contextTokens?: number;
+  // Additional fields from last message
+  lastMessage?: string;
+  lastMessageAt?: number;
 }
 
-/** Sessions list result */
+/** Sessions defaults from gateway */
+export interface GatewaySessionsDefaults {
+  defaultAgentId: string;
+  mainKey: string;
+  mainSessionKey: string;
+  scope?: string;
+}
+
+/** Sessions list result (matches openclaw/ui) */
 export interface SessionsListResult {
   ts: number;
   path: string;
   count: number;
-  defaults: { model: string | null; contextTokens: number | null };
+  defaults: GatewaySessionsDefaults;
   sessions: GatewaySessionRow[];
+}
+
+/** Sessions patch result */
+export interface SessionsPatchResult {
+  ok: true;
+  path: string;
+  key: string;
+  entry: {
+    sessionId: string;
+    updatedAt?: number;
+    thinkingLevel?: string;
+    verboseLevel?: string;
+    reasoningLevel?: string;
+    elevatedLevel?: string;
+  };
 }
 
 /** Presence entry */
