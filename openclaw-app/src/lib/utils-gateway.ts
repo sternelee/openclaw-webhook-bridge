@@ -73,6 +73,11 @@ export class GatewayClient {
 
   stop() {
     this.closed = true;
+    // Clear any pending connection timers
+    if (this.connectTimer !== null) {
+      window.clearTimeout(this.connectTimer);
+      this.connectTimer = null;
+    }
     this.ws?.close();
     this.ws = null;
     this.flushPending(new Error("gateway client stopped"));
