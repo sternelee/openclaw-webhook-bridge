@@ -57,6 +57,8 @@ export default function ChatPage() {
     getLocalSessions,
     sessions: gatewaySessions,
     sessionsLoading,
+    currentModelProvider,
+    currentModel,
   } = useAppStore();
 
   // Load settings and connect on mount
@@ -364,6 +366,23 @@ export default function ChatPage() {
 
           {/* Queue display */}
           <QueueDisplay queue={queue} onRemove={handleRemoveFromQueue} />
+
+          {/* Model info display */}
+          {(currentModelProvider || currentModel) && (
+            <div className="px-3 md:px-4 py-2 border-t border-border/50 bg-muted/30">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {currentModelProvider && (
+                  <span className="font-medium text-foreground">{currentModelProvider}</span>
+                )}
+                {currentModelProvider && currentModel && (
+                  <span className="text-border">/</span>
+                )}
+                {currentModel && (
+                  <span>{currentModel}</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Chat input */}
           <ChatInput

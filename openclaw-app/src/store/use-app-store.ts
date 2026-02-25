@@ -10,6 +10,7 @@ import type {
   ChatAttachment,
   ChatQueueItem,
   GatewayHelloOk,
+  GatewaySessionRow,
   SessionsListResult,
   SessionsPatchResult,
   PresenceEntry,
@@ -53,6 +54,11 @@ interface AppState {
   assistantName: string;
   assistantAvatar: string | null;
 
+  // Current model info (from sessions.list response)
+  currentModelProvider: string | null;
+  currentModel: string | null;
+  currentContextTokens: number | null;
+
   // Actions
   setConnected: (connected: boolean) => void;
   setGatewayUrl: (url: string) => void;
@@ -89,6 +95,7 @@ interface AppState {
   addEventLog: (entry: EventLogEntry) => void;
   setAssistantName: (name: string) => void;
   setAssistantAvatar: (avatar: string | null) => void;
+  setCurrentModelInfo: (provider: string | null, model: string | null, contextTokens: number | null) => void;
 
   // Connection management
   connect: () => void;
@@ -155,6 +162,10 @@ export const useAppStore = create<AppState>()(
         assistantName: 'OpenClaw',
         assistantAvatar: null,
 
+        currentModelProvider: null,
+        currentModel: null,
+        currentContextTokens: null,
+
         // Connection actions
         setConnected: (connected) => set({ connected }),
         setGatewayUrl: (url) => set({ gatewayUrl: url }),
@@ -214,6 +225,8 @@ export const useAppStore = create<AppState>()(
           set((state) => ({ eventLog: [entry, ...state.eventLog].slice(0, 250) })),
         setAssistantName: (name) => set({ assistantName: name }),
         setAssistantAvatar: (avatar) => set({ assistantAvatar: avatar }),
+        setCurrentModelInfo: (provider, model, contextTokens) =>
+          set({ currentModelProvider: provider, currentModel: model, currentContextTokens: contextTokens }),
 
         // Connection management
         connect: () => {
@@ -339,10 +352,38 @@ export const useAppStore = create<AppState>()(
                     });
                   }
                 } else if (evt.event === 'gateway.response') {
-                  // Gateway response events (e.g., tool call results)
+                  // Gateway response events
                   const payload = evt.payload as any;
                   console.log('[Gateway] Response:', payload);
-                  // For tool call responses, add to stream if there's content
+
+                  // Handle sessions.list response - update sessions and model info
+                  if (payload.id === 'sessions.list' && payload.ok && payload.payload) {
+                    const sessionsPayload = payload.payload as any;
+                    if (sessionsPayload.sessions) {
+                      set({ sessions: sessionsPayload as SessionsListResult });
+                      // Extract model info from defaults
+                      if (sessionsPayload.defaults) {
+                        set({
+                          currentModelProvider: sessionsPayload.defaults.modelProvider || null,
+                          currentModel: sessionsPayload.defaults.model || null,
+                          currentContextTokens: sessionsPayload.defaults.contextTokens || null,
+                        });
+                      }
+                      // Also update current session's model info if exists
+                      const currentSession = sessionsPayload.sessions.find(
+                        (s: GatewaySessionRow) => s.key === get().sessionKey
+                      );
+                      if (currentSession) {
+                        set({
+                          currentModelProvider: currentSession.modelProvider || sessionsPayload.defaults?.modelProvider || null,
+                          currentModel: currentSession.model || sessionsPayload.defaults?.model || null,
+                        });
+                      }
+                    }
+                    return; // Don't add to stream
+                  }
+
+                  // For other tool call responses, add to stream if there's content
                   if (payload.ok && payload.payload) {
                     const payloadStr = typeof payload.payload === 'string'
                       ? payload.payload
