@@ -30,12 +30,18 @@ fn load_or_create_device_identity(config_dir: &std::path::Path) -> Result<Device
 
     if identity_path.exists() {
         let content = std::fs::read_to_string(&identity_path)?;
-        let stored: serde_json::Value = serde_json::from_str(&content)
-            .context("Failed to parse identity file")?;
+        let stored: serde_json::Value =
+            serde_json::from_str(&content).context("Failed to parse identity file")?;
 
-        let device_id = stored["deviceId"].as_str().ok_or_else(|| anyhow::anyhow!("missing deviceId"))?;
-        let public_key_b64 = stored["publicKey"].as_str().ok_or_else(|| anyhow::anyhow!("missing publicKey"))?;
-        let private_key_b64 = stored["privateKey"].as_str().ok_or_else(|| anyhow::anyhow!("missing privateKey"))?;
+        let device_id = stored["deviceId"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing deviceId"))?;
+        let public_key_b64 = stored["publicKey"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing publicKey"))?;
+        let private_key_b64 = stored["privateKey"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing privateKey"))?;
 
         let public_key = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(public_key_b64)
@@ -149,7 +155,12 @@ struct AgentRequestParams {
 }
 
 impl Client {
-    pub fn new(port: u16, token: String, agent_id: String, config_dir: &std::path::Path) -> Result<Self> {
+    pub fn new(
+        port: u16,
+        token: String,
+        agent_id: String,
+        config_dir: &std::path::Path,
+    ) -> Result<Self> {
         let device_identity = load_or_create_device_identity(config_dir)?;
 
         Ok(Self {
@@ -299,8 +310,11 @@ impl Client {
 
         let (mut write, mut read) = ws_stream.split();
 
-        // Send connect request with device identity
-        Self::send_connect_request(&mut write, token, agent_id, device_identity).await?;
+        // Wait for connect.challenge event to get the nonce
+        let nonce = Self::wait_for_connect_challenge(&mut read).await?;
+
+        // Send connect request with device identity and nonce
+        Self::send_connect_request(&mut write, token, agent_id, device_identity, &nonce).await?;
 
         // Wait for connect response before marking as connected
         // The Gateway must acknowledge our connect request with ok:true
@@ -453,6 +467,76 @@ impl Client {
         Ok(())
     }
 
+    /// Wait for connect.challenge event and extract nonce
+    async fn wait_for_connect_challenge(
+        read: &mut futures_util::stream::SplitStream<
+            tokio_tungstenite::WebSocketStream<
+                tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+            >,
+        >,
+    ) -> Result<String> {
+        let challenge_timeout = sleep(Duration::from_secs(10));
+        tokio::pin!(challenge_timeout);
+
+        loop {
+            tokio::select! {
+                msg_result = read.next() => {
+                    match msg_result {
+                        Some(Ok(Message::Text(text))) => {
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                let msg_type = json.get("type").and_then(|v| v.as_str());
+                                let event = json.get("event").and_then(|v| v.as_str());
+
+                                if msg_type == Some("event") && event == Some("connect.challenge") {
+                                    if let Some(payload) = json.get("payload") {
+                                        if let Some(nonce) = payload.get("nonce").and_then(|v| v.as_str()) {
+                                            info!("[OpenClaw] Received connect challenge with nonce");
+                                            return Ok(nonce.to_string());
+                                        }
+                                    }
+                                    anyhow::bail!("connect.challenge missing nonce payload");
+                                }
+                            }
+                        }
+                        Some(Ok(Message::Binary(data))) => {
+                            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&data) {
+                                let msg_type = json.get("type").and_then(|v| v.as_str());
+                                let event = json.get("event").and_then(|v| v.as_str());
+
+                                if msg_type == Some("event") && event == Some("connect.challenge") {
+                                    if let Some(payload) = json.get("payload") {
+                                        if let Some(nonce) = payload.get("nonce").and_then(|v| v.as_str()) {
+                                            info!("[OpenClaw] Received connect challenge with nonce");
+                                            return Ok(nonce.to_string());
+                                        }
+                                    }
+                                    anyhow::bail!("connect.challenge missing nonce payload");
+                                }
+                            }
+                        }
+                        Some(Ok(Message::Close(_))) => {
+                            anyhow::bail!("Connection closed while waiting for challenge");
+                        }
+                        Some(Ok(Message::Ping(data))) => {
+                            // Ignore pings during challenge wait
+                            let _ = data;
+                        }
+                        Some(Ok(_)) => {}
+                        Some(Err(e)) => {
+                            anyhow::bail!("Error waiting for challenge: {}", e);
+                        }
+                        None => {
+                            anyhow::bail!("Stream ended while waiting for challenge");
+                        }
+                    }
+                }
+                _ = &mut challenge_timeout => {
+                    anyhow::bail!("Timeout waiting for connect.challenge");
+                }
+            }
+        }
+    }
+
     /// Send the initial connect handshake
     async fn send_connect_request(
         write: &mut futures_util::stream::SplitSink<
@@ -464,14 +548,16 @@ impl Client {
         token: &str,
         _agent_id: &str,
         device_identity: &DeviceIdentity,
+        nonce: &str,
     ) -> Result<()> {
         let signed_at = chrono::Utc::now().timestamp_millis();
 
-        // Build device auth payload: version|deviceId|clientId|clientMode|role|scopes|signedAtMs|token
+        // Build device auth payload (v2 format with nonce):
+        // v2|deviceId|clientId|clientMode|role|scopes|signedAtMs|token|nonce
         let scopes = "operator.read,operator.write,operator.admin";
         let payload = format!(
-            "v1|{}|gateway-client|backend|operator|{}|{}|{}",
-            device_identity.device_id, scopes, signed_at, token
+            "v2|{}|gateway-client|backend|operator|{}|{}|{}|{}",
+            device_identity.device_id, scopes, signed_at, token, nonce
         );
 
         let signature = sign_device_payload(&device_identity.private_key, &payload);
@@ -501,11 +587,15 @@ impl Client {
                     "publicKey": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(device_identity.public_key),
                     "signature": signature,
                     "signedAt": signed_at,
+                    "nonce": nonce,
                 }
             }
         });
 
-        info!("[OpenClaw] Sending connect request with device identity: {}", device_identity.device_id);
+        info!(
+            "[OpenClaw] Sending connect request with device identity: {}",
+            device_identity.device_id
+        );
 
         let data = serde_json::to_vec(&connect_req)?;
         write

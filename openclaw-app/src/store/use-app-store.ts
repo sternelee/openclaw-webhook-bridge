@@ -338,6 +338,23 @@ export const useAppStore = create<AppState>()(
                       lastError: errorMsg,
                     });
                   }
+                } else if (evt.event === 'gateway.response') {
+                  // Gateway response events (e.g., tool call results)
+                  const payload = evt.payload as any;
+                  console.log('[Gateway] Response:', payload);
+                  // For tool call responses, add to stream if there's content
+                  if (payload.ok && payload.payload) {
+                    const payloadStr = typeof payload.payload === 'string'
+                      ? payload.payload
+                      : JSON.stringify(payload.payload, null, 2);
+                    set((state) => ({
+                      stream: (state.stream || '') + '\n[Response: ' + payloadStr + ']',
+                    }));
+                  } else if (!payload.ok && payload.error) {
+                    set((state) => ({
+                      stream: (state.stream || '') + '\n[Error: ' + payload.error.message + ']',
+                    }));
+                  }
                 } else if (evt.event === 'presence' || evt.event === 'health') {
                   // Presence/health events
                   // Update state version tracking

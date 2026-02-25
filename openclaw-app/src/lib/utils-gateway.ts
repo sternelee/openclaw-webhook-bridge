@@ -272,6 +272,24 @@ export class GatewayClient {
     if (frame.type === "res") {
       const res = parsed as GatewayResponseFrame;
       console.log("[gateway] Received response:", res.id, res.ok ? "ok" : "error");
+
+      // Also emit as event for UI display (e.g., tool call results)
+      const resEvent: GatewayEventFrame = {
+        type: "event",
+        event: "gateway.response",
+        payload: {
+          id: res.id,
+          ok: res.ok,
+          payload: res.payload,
+          error: res.error,
+        },
+      };
+      try {
+        this.opts.onEvent?.(resEvent);
+      } catch (err) {
+        console.error("[gateway] response event handler error:", err);
+      }
+
       const pending = this.pending.get(res.id);
       if (!pending) {
         console.warn("[gateway] No pending request for response id:", res.id);
