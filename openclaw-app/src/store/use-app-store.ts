@@ -357,28 +357,27 @@ export const useAppStore = create<AppState>()(
                   console.log('[Gateway] Response:', payload);
 
                   // Handle sessions.list response - update sessions and model info
-                  if (payload.id === 'sessions.list' && payload.ok && payload.payload) {
-                    const sessionsPayload = payload.payload as any;
-                    if (sessionsPayload.sessions) {
-                      set({ sessions: sessionsPayload as SessionsListResult });
-                      // Extract model info from defaults
-                      if (sessionsPayload.defaults) {
-                        set({
-                          currentModelProvider: sessionsPayload.defaults.modelProvider || null,
-                          currentModel: sessionsPayload.defaults.model || null,
-                          currentContextTokens: sessionsPayload.defaults.contextTokens || null,
-                        });
-                      }
-                      // Also update current session's model info if exists
-                      const currentSession = sessionsPayload.sessions.find(
-                        (s: GatewaySessionRow) => s.key === get().sessionKey
-                      );
-                      if (currentSession) {
-                        set({
-                          currentModelProvider: currentSession.modelProvider || sessionsPayload.defaults?.modelProvider || null,
-                          currentModel: currentSession.model || sessionsPayload.defaults?.model || null,
-                        });
-                      }
+                  // Check for sessions array in payload to identify this response
+                  if (payload.ok && payload.payload && Array.isArray(payload.payload.sessions)) {
+                    const sessionsPayload = payload.payload;
+                    set({ sessions: sessionsPayload as SessionsListResult });
+                    // Extract model info from defaults
+                    if (sessionsPayload.defaults) {
+                      set({
+                        currentModelProvider: sessionsPayload.defaults.modelProvider || null,
+                        currentModel: sessionsPayload.defaults.model || null,
+                        currentContextTokens: sessionsPayload.defaults.contextTokens || null,
+                      });
+                    }
+                    // Also update current session's model info if exists
+                    const currentSession = sessionsPayload.sessions.find(
+                      (s: GatewaySessionRow) => s.key === get().sessionKey
+                    );
+                    if (currentSession) {
+                      set({
+                        currentModelProvider: currentSession.modelProvider || sessionsPayload.defaults?.modelProvider || null,
+                        currentModel: currentSession.model || sessionsPayload.defaults?.model || null,
+                      });
                     }
                     return; // Don't add to stream
                   }
