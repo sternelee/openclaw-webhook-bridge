@@ -382,6 +382,33 @@ export const useAppStore = create<AppState>()(
                     return; // Don't add to stream
                   }
 
+                  // Handle agent response - extract text from payloads and skip meta
+                  if (payload.ok && payload.payload && typeof payload.payload === 'object') {
+                    const pl = payload.payload as any;
+                    // Check if this is an agent response (has runId, status, result)
+                    if (pl.runId && pl.result && pl.result.payloads) {
+                      // Extract texts from payloads
+                      const texts = pl.result.payloads
+                        .filter((p: any) => p.text)
+                        .map((p: any) => p.text)
+                        .join('\n');
+                      if (texts) {
+                        set((state) => ({
+                          stream: (state.stream || '') + texts,
+                        }));
+                      }
+                      // Update model info from agentMeta if available
+                      if (pl.result.meta?.agentMeta) {
+                        const agentMeta = pl.result.meta.agentMeta;
+                        set({
+                          currentModelProvider: agentMeta.provider || null,
+                          currentModel: agentMeta.model || null,
+                        });
+                      }
+                      return; // Don't add full response with meta to stream
+                    }
+                  }
+
                   // For other tool call responses, add to stream if there's content
                   if (payload.ok && payload.payload) {
                     const payloadStr = typeof payload.payload === 'string'
