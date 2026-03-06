@@ -379,11 +379,51 @@ All WebSocket connections in this system use UID (Unique Identifier) based routi
 
 This design allows multiple bridges and multiple clients to connect to the same webhook server without conflicts, with efficient hibernation support.
 
+## Architecture Decisions
+
+### Why Rust for Bridge?
+
+The OpenClaw Bridge is implemented in Rust for several key reasons:
+- **Performance**: Async I/O with tokio provides excellent performance for WebSocket handling
+- **Memory Safety**: Rust's ownership system prevents data races and null pointer dereferences
+- **Small Binary**: ~2.7MB stripped binary (vs ~10MB for Go) reduces deployment size
+- **Low Memory Footprint**: 2-3MB runtime memory usage, ideal for resource-constrained environments
+- **Type Safety**: Strong type system catches errors at compile time, reducing runtime bugs
+
+### Why Cloudflare Workers for Webhook?
+
+- **Global Distribution**: Automatic worldwide deployment to Cloudflare edge locations
+- **Hibernation Support**: Durable Objects with hibernation API reduce costs when idle
+- **Scalability**: Automatic scaling without server management
+- **Reliability**: Built-in redundancy and fault tolerance
+- **Single Durable Object**: UID-based routing in a single global DO simplifies architecture
+
+### Why Taro for WeChat Mini-Program?
+
+- **WeChat Compatibility**: Taro is specifically designed for WeChat mini-program development
+- **React-Based**: Familiar React paradigm for component development
+- **Cross-Platform**: Can potentially target other platforms (Alipay, Baidu, etc.) with same codebase
+- **Mature Ecosystem**: Well-maintained framework with good documentation
+
+### Why Next.js + OpenNext for Web App?
+
+- **Modern React**: Next.js 16 with React 19 provides latest features and performance
+- **Cloudflare Deployment**: OpenNext enables deployment to Cloudflare Workers
+- **Developer Experience**: Hot reload, TypeScript support, excellent tooling
+- **Production Ready**: Optimized builds, image optimization, and other best practices out of the box
+
 ## Key Design Decisions
 
 - **Streaming Response Support**: The mini-program supports streaming AI responses via WebSocket. Messages with `type: "progress"` update the UI incrementally, while `type: "complete"` finalizes the response. The chat store tracks `streaming` state and `currentStreamingMessage` for UI feedback.
 
 - **Message Grouping**: Consecutive messages from the same role (user/assistant) are grouped together in the UI for cleaner display. Both the store (`groupedMessages` computed) and component (`groupMessages` method) implement this pattern.
+- **Session key resolution**:
+  - `per-sender` scope (default): Each webhook message gets `webhook:{id}` session key for isolated conversations
+  - `global` scope: All messages share a single `global` session
+  - Explicit session: If webhook message provides `session` field, it overrides the generated key
+- **Delivery context tracking**: Each session tracks `lastChannel`, `lastTo`, `lastAccountId`, `lastThreadId` for proper response routing. This allows the bridge to route responses back to the correct webhook client.
+- **Session reset triggers**: Messages matching `/new` or `/reset` trigger session reset (fresh conversation context). The session preserves its delivery context but starts with a new `sessionId`.
+- **Command handling**: The bridge supports slash commands (`/help`, `/commands`, `/skill`, `/approve`) that are intercepted and handled locally or forwarded to OpenClaw Gateway. Commands are detected by leading `/` and parsed by `src/commands/mod.rs`.
 
 - **Session key resolution**:
   - `per-sender` scope (default): Each webhook message gets `webhook:{id}` session key for isolated conversations
@@ -410,54 +450,34 @@ This design allows multiple bridges and multiple clients to connect to the same 
 - **Concurrency**: Use `tokio::sync` (Rust) for shared state
 - **WebSocket Reconnect**: Exponential backoff 2s → 4s → 8s → max 30s
 
-## File Structure Reference
+## Key Files
 
-```
-openclaw-run/
-├── src/                     # Rust implementation
-│   ├── main.rs              # CLI entry point
-│   ├── bridge/              # Core routing logic
-│   ├── commands/            # Command handling
-│   ├── config/              # Configuration management
-│   ├── openclaw/            # OpenClaw Gateway client
-│   ├── sessions/            # Session management
-│   └── webhook/             # Webhook WebSocket client
-├── cloudflare-webhook/      # Cloudflare Workers webhook (Hono + Durable Objects)
-│   ├── src/
-│   │   ├── index.ts         # Hono router with test page
-│   │   └── websocket-hub.ts # Durable Object with UID routing
-│   ├── wrangler.toml        # Worker configuration
-│   └── package.json
-├── node-webhook/            # Local Node.js WebSocket server for testing
-│   ├── server.js            # WebSocket server
-│   ├── test-page.html       # Test page UI
-│   └── package.json
-├── openclaw-mapp/           # WeChat mini-program
-│   ├── src/
-│   │   ├── app.tsx          # App entry point
-│   │   ├── app.config.ts    # Page routes, component registration
-│   │   ├── components/      # Reusable components
-│   │   ├── pages/           # Page components
-│   │   ├── services/        # WebSocket service
-│   │   ├── store/           # MobX stores
-│   │   └── types/           # TypeScript definitions
-│   ├── config/              # Taro build config
-│   └── package.json
-├── openclaw-app/            # Next.js web app (OpenNext for Cloudflare)
-│   ├── src/
-│   │   └── app/             # Next.js app directory
-│   ├── open-next.config.ts  # OpenNext configuration
-│   ├── next.config.ts       # Next.js configuration
-│   └── package.json
-├── Makefile                 # Build commands
-├── Cargo.toml               # Rust project manifest
-├── CLAUDE.md                # This file - AI agent guidance
-├── AGENTS.md                # Additional AI agent guidelines
-├── COMMANDS.md              # Slash commands feature documentation
-├── RUST_README.md           # Rust implementation guide
-├── SESSION_CONTROL.md       # Session control protocol documentation
-└── README.md                # User-facing documentation
-```
+### Bridge (Rust)
+- `src/main.rs` - CLI entry point with daemon management
+- `src/bridge/mod.rs` - Core routing logic between webhook and OpenClaw
+- `src/openclaw/mod.rs` - OpenClaw Gateway WebSocket client
+- `src/webhook/mod.rs` - Webhook WebSocket client
+- `src/sessions/mod.rs` - File-based session persistence with cache
+- `src/commands/mod.rs` - Slash command parser and handler
+- `src/config/mod.rs` - Configuration loader for ~/.openclaw/
+
+### Cloudflare Webhook
+- `cloudflare-webhook/src/index.ts` - Hono router with test page
+- `cloudflare-webhook/src/websocket-hub.ts` - Durable Object with UID routing
+
+### WeChat Mini-Program
+- `openclaw-mapp/src/pages/chat/index.tsx` - Main chat interface
+- `openclaw-mapp/src/services/websocket.ts` - WebSocket client with UID routing
+- `openclaw-mapp/src/store/chatStore.ts` - MobX store for messages and streaming
+
+### Next.js Web App
+- `openclaw-app/src/app/chat/page.tsx` - Chat interface with streaming
+- `openclaw-app/src/store/use-app-store.ts` - Zustand store for app state
+
+### Configuration Files
+- `~/.openclaw/openclaw.json` - OpenClaw Gateway config (port, auth token)
+- `~/.openclaw/bridge.json` - Bridge config (webhook URL, UID, agent ID, session scope)
+- `~/.openclaw/sessions.json` - Session store (auto-created and persisted)
 
 ## Slash Commands
 
@@ -470,7 +490,9 @@ The bridge supports local slash commands that are intercepted before forwarding 
 
 Commands are detected by the leading `/` and handled by `src/commands/mod.rs`. See `COMMANDS.md` for full protocol details.
 
-## WebSocket Protocol Details
+**Note**: COMMANDS.md and SESSION_CONTROL.md are written in Chinese. For English documentation, refer to this CLAUDE.md file and code comments.
+
+## WebSocket Protocol Details## WebSocket Protocol Details
 
 ### Client → Webhook (incoming)
 
