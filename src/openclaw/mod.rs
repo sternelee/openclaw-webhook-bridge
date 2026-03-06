@@ -113,7 +113,23 @@ fn compute_device_id(public_key: &[u8; 32]) -> String {
     hex::encode(hash)
 }
 
-/// Sign device auth payload
+/// Normalize device metadata for auth payload
+/// Per OpenClaw spec: only lowercases ASCII uppercase letters (A-Z)
+/// Leaves all other characters unchanged
+fn normalize_device_metadata(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if ('A'..='Z').contains(&c) {
+                // Convert to lowercase: A-Z maps to a-z (ASCII only)
+                char::from_u32(c as u32 + 32).unwrap_or(c)
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+/// Sign device auth payload using Ed25519 private key
 fn sign_device_payload(private_key: &[u8; 32], payload: &str) -> String {
     let signing_key = SigningKey::from_bytes(private_key);
     let signature = signing_key.sign(payload.as_bytes());
@@ -552,15 +568,19 @@ impl Client {
     ) -> Result<()> {
         let signed_at = chrono::Utc::now().timestamp_millis();
 
-        // Build device auth payload (v2 format with nonce):
-        // v2|deviceId|clientId|clientMode|role|scopes|signedAtMs|token|nonce
+        // Build device auth payload (v3 format with platform and deviceFamily):
+        // v3|deviceId|clientId|clientMode|role|scopes|signedAtMs|token|nonce|platform|deviceFamily
         let scopes = "operator.read,operator.write,operator.admin";
+        let platform = normalize_device_metadata("linux");
+        let device_family = normalize_device_metadata("server");
         let payload = format!(
-            "v2|{}|gateway-client|backend|operator|{}|{}|{}|{}",
-            device_identity.device_id, scopes, signed_at, token, nonce
+            "v3|{}|gateway-client|backend|operator|{}|{}|{}|{}|{}|{}",
+            device_identity.device_id, scopes, signed_at, token, nonce, platform, device_family
         );
 
+        info!("[OpenClaw] Device auth v3 payload: {}", payload);
         let signature = sign_device_payload(&device_identity.private_key, &payload);
+        info!("[OpenClaw] Device signature: {}", signature);
 
         let connect_req = json!({
             "type": "req",
@@ -573,6 +593,7 @@ impl Client {
                     "id": "gateway-client",
                     "version": "0.2.0",
                     "platform": "linux",
+                    "deviceFamily": "server",
                     "mode": "backend",
                 },
                 "role": "operator",
