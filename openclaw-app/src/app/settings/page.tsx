@@ -20,6 +20,7 @@ export default function ConfigPage() {
   const gatewayUrlId = useId();
   const uidId = useId();
   const tokenId = useId();
+  const [connecting, setConnecting] = useState(false);
   const {
     gatewayUrl,
     token,
@@ -44,6 +45,14 @@ export default function ConfigPage() {
     setUid(settings.uid);
   }, [setGatewayUrl, setToken, setUid]);
 
+  // Auto-navigate to chat when connected
+  useEffect(() => {
+    if (connected && connecting) {
+      setConnecting(false);
+      router.push("/chat");
+    }
+  }, [connected, connecting, router]);
+
   const handleSave = () => {
     const settings = loadSettings();
     settings.gatewayUrl = localUrl;
@@ -58,6 +67,7 @@ export default function ConfigPage() {
 
   const handleConnect = () => {
     handleSave();
+    setConnecting(true);
     connect();
   };
 
@@ -146,10 +156,16 @@ export default function ConfigPage() {
                   <Icons.check className="h-4 w-4 mr-2" />
                   Save
                 </Button>
-                <Button onClick={handleConnect} disabled={!localUrl}>
+                <Button onClick={handleConnect} disabled={!localUrl || connecting}>
                   <Icons.wifi className="h-4 w-4 mr-2" />
-                  {connected ? "Reconnect" : "Connect"}
+                  {connecting ? "Connecting..." : connected ? "Reconnect" : "Connect"}
                 </Button>
+                {connected && (
+                  <Button onClick={() => router.push("/chat")}>
+                    <Icons.messageSquare className="h-4 w-4 mr-2" />
+                    Go to Chat
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

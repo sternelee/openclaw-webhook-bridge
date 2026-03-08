@@ -2,7 +2,7 @@
  * Chat utility functions for message handling, copying, etc.
  */
 
-import type { ChatMessage, MessageContentItem } from "@/types";
+import type { ChatMessage, MessageContentItem, TextContentItem } from "@/types";
 
 /**
  * Copy text to clipboard
@@ -30,8 +30,8 @@ export function extractMessageText(message: ChatMessage): string {
 
   if (Array.isArray(content)) {
     const textItems = content
-      .filter((item: MessageContentItem) => item.type === "text")
-      .map((item: MessageContentItem) => item.text || "")
+      .filter((item) => item.type === "text")
+      .map((item) => (item as TextContentItem).text || "")
       .filter(Boolean);
     return textItems.join("\n\n");
   }
@@ -91,17 +91,17 @@ export function formatMessageContent(content: string | MessageContentItem[]): {
 
   const textItems: string[] = [];
   for (const item of content) {
-    if (item.type === "text" && item.text) {
-      textItems.push(item.text);
-    } else if (item.type === "tool_call") {
+    if (item.type === "text" && "text" in item) {
+      textItems.push((item.text as string) || "");
+    } else if (item.type === "tool_call" && "name" in item) {
       result.toolCalls.push({
         name: item.name || "unknown",
         args: item.args,
       });
-    } else if (item.type === "tool_result") {
+    } else if (item.type === "tool_result" && "name" in item) {
       result.toolResults.push({
         name: item.name || "unknown",
-        text: item.text,
+        text: "text" in item ? item.text : undefined,
       });
     }
   }

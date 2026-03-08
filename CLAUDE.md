@@ -425,17 +425,6 @@ The OpenClaw Bridge is implemented in Rust for several key reasons:
 - **Session reset triggers**: Messages matching `/new` or `/reset` trigger session reset (fresh conversation context). The session preserves its delivery context but starts with a new `sessionId`.
 - **Command handling**: The bridge supports slash commands (`/help`, `/commands`, `/skill`, `/approve`) that are intercepted and handled locally or forwarded to OpenClaw Gateway. Commands are detected by leading `/` and parsed by `src/commands/mod.rs`.
 
-- **Session key resolution**:
-  - `per-sender` scope (default): Each webhook message gets `webhook:{id}` session key for isolated conversations
-  - `global` scope: All messages share a single `global` session
-  - Explicit session: If webhook message provides `session` field, it overrides the generated key
-
-- **Delivery context tracking**: Each session tracks `lastChannel`, `lastTo`, `lastAccountId`, `lastThreadId` for proper response routing. This allows the bridge to route responses back to the correct webhook client.
-
-- **Session reset triggers**: Messages matching `/new` or `/reset` trigger session reset (fresh conversation context). The session preserves its delivery context but starts with a new `sessionId`.
-
-- **Command handling**: The bridge supports slash commands (`/help`, `/commands`, `/skill`, `/approve`) that are intercepted and handled locally or forwarded to OpenClaw Gateway. Commands are detected by leading `/` and parsed by `src/commands/mod.rs`.
-
 - **Control message filtering**: The bridge ignores webhook control payloads with `type` values like `connected`, `error`, or `event`. These are internal WebSocket protocol messages, not user content.
 
 - **Mandatory UID routing**: The bridge requires a UID (unique identifier) to append as a query parameter when connecting to the webhook server (`?uid=...`). This allows webhook servers to distinguish between multiple bridge instances. If not provided in config, a UUID v4 is auto-generated and saved.
@@ -492,7 +481,7 @@ Commands are detected by the leading `/` and handled by `src/commands/mod.rs`. S
 
 **Note**: COMMANDS.md and SESSION_CONTROL.md are written in Chinese. For English documentation, refer to this CLAUDE.md file and code comments.
 
-## WebSocket Protocol Details## WebSocket Protocol Details
+## WebSocket Protocol Details
 
 ### Client → Webhook (incoming)
 

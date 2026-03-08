@@ -1,5 +1,6 @@
 /**
  * MessageBubble component for displaying a single chat message.
+ * Enhanced with thinking/reasoning support from official OpenClaw UI.
  */
 
 import { useState } from "react";
@@ -9,7 +10,8 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { stripMarkdown } from "@/lib/utils-markdown";
-import { copyToClipboard, messageToMarkdown } from "@/lib/utils-chat";
+import { copyToClipboard } from "@/lib/utils-chat";
+import { messageToMarkdown, extractText, extractThinking, formatReasoningMarkdown, extractImages, getRoleDisplayInfo, normalizeRoleForGrouping } from "@/lib/utils-message";
 import { Icons } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { ToolCardComponent } from "./ToolCard";
@@ -27,6 +29,7 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
   const { role, content, timestamp } = message;
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
+  const [showThinking, setShowThinking] = useState(false);
 
   // Normalize content to array
   const contentItems: MessageContentItem[] = Array.isArray(content)
@@ -52,6 +55,14 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
     const textItems = contentItems.filter((item) => item.type === "text");
     return textItems.map((item) => item.text || "").join("\n");
   };
+
+  // Extract thinking/reasoning from message
+  const thinkingContent = extractThinking(message);
+  const hasThinking = thinkingContent && thinkingContent.trim().length > 0;
+
+  // Extract images from message
+  const images = extractImages(message);
+  const hasImages = images.length > 0;
 
   // Get tool cards from message
   const getToolCards = () => {
@@ -82,7 +93,7 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
   const hasContent = textContent.trim().length > 0 || toolCards.length > 0;
 
   // Don't render empty messages
-  if (!hasContent) return null;
+  if (!hasContent && !hasThinking && !hasImages) return null;
 
   const timeString = formatDistanceToNow(new Date(timestamp), { addSuffix: true });
 
@@ -133,6 +144,43 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
           </div>
         )}
 
+        {/* Thinking/Reasoning display */}
+        {hasThinking && (
+          <div className="px-4 py-2 rounded-lg bg-muted/50 border border-border/50">
+            <button
+              type="button"
+              onClick={() => setShowThinking(!showThinking)}
+              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
+            >
+              <Icons.brain className="h-4 w-4" />
+              <span>Thinking</span>
+              <span className="transform transition-transform">{showThinking ? "▼" : "▶"}</span>
+            </button>
+            {showThinking && (
+              <div className="prose prose-invert prose-sm max-w-none dark:prose-invert">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {formatReasoningMarkdown(thinkingContent)}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Images display */}
+        {hasImages && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {images.map((img, index) => (
+              <img
+                key={index}
+                src={img.url}
+                alt={img.alt || "Attached image"}
+                className="max-w-[200px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => window.open(img.url, "_blank")}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Text content */}
         {textContent.trim().length > 0 && (
           <div
@@ -154,7 +202,7 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
                       const match = /language-(\w+)/.exec(className || "");
                       const language = match ? match[1] : "text";
                       const codeString = String(children).replace(/\n$/, "");
-                      
+
                       return !inline ? (
                         <SyntaxHighlighter
                           style={oneDark}

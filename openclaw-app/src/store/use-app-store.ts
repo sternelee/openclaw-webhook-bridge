@@ -17,6 +17,7 @@ import type {
   EventLogEntry,
 } from '@/types';
 import * as SessionStorage from '@/lib/session-storage';
+import { stripThinkingTags } from '@/lib/utils-message';
 
 interface AppState {
   // Connection state
@@ -179,6 +180,21 @@ export const useAppStore = create<AppState>()(
         setSessionKey: (key) => set({ sessionKey: key }),
         setMessages: (messages) => set({ messages }),
         addMessage: (message) => {
+          // Filter out system messages and empty content
+          const role = message.role?.toLowerCase();
+          if (role === 'system') {
+            return; // Skip system messages
+          }
+          // Check if content is empty
+          const content = message.content;
+          const hasContent = typeof content === 'string'
+            ? content.trim().length > 0
+            : Array.isArray(content)
+              ? content.some((c: any) => c.type === 'text' && c.text?.trim())
+              : false;
+          if (!hasContent) {
+            return; // Skip messages with no text content
+          }
           set((state) => ({ messages: [...state.messages, message] }));
           // Auto-save to localStorage
           setTimeout(() => get().saveCurrentSession(), 100);
@@ -266,16 +282,17 @@ export const useAppStore = create<AppState>()(
                 // Handle chat events (from Gateway)
                 if (evt.event === 'chat') {
                   const payload = evt.payload as any;
-                  
-                  // Extract text from content array
+
+                  // Extract text from content array, strip thinking/meta tags
                   const extractText = (content: any): string => {
                     if (!content) return '';
-                    if (typeof content === 'string') return content;
+                    if (typeof content === 'string') return stripThinkingTags(content);
                     if (Array.isArray(content)) {
-                      return content
+                      const text = content
                         .filter((c) => c.type === 'text')
                         .map((c) => c.text || '')
                         .join('');
+                      return stripThinkingTags(text);
                     }
                     return '';
                   };

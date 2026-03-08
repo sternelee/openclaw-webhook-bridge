@@ -8,6 +8,7 @@ import { MessageBubble, getMessagePreview } from "./MessageBubble";
 import { Icons } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/utils-chat";
+import { groupMessagesByRole, normalizeRoleForGrouping } from "@/lib/utils-message";
 import type { ChatMessage } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 
@@ -131,42 +132,13 @@ export function MessageGroup({ messages, role, timestamp, onViewToolDetail }: Me
 
 /**
  * Group consecutive messages from the same role together.
+ * Uses the improved grouping logic from utils-message.
  */
 export function groupMessages(messages: ChatMessage[]): Array<{
   role: string;
   messages: ChatMessage[];
   timestamp: number;
+  isStreaming?: boolean;
 }> {
-  const groups: Array<{ role: string; messages: ChatMessage[]; timestamp: number }> = [];
-
-  for (const message of messages) {
-    const role = normalizeRoleForGrouping(message.role);
-    const timestamp = message.timestamp || Date.now();
-
-    if (groups.length === 0 || groups[groups.length - 1].role !== role) {
-      groups.push({
-        role,
-        messages: [message],
-        timestamp,
-      });
-    } else {
-      groups[groups.length - 1].messages.push(message);
-    }
-  }
-
-  return groups;
-}
-
-/**
- * Normalize role for grouping (e.g., tool_result -> tool)
- */
-function normalizeRoleForGrouping(role: string): string {
-  const normalized = role.toLowerCase();
-  if (normalized === "tool_result" || normalized === "toolresult" || normalized === "toolresult") {
-    return "tool";
-  }
-  if (normalized === "tool_call" || normalized === "toolcall") {
-    return "tool";
-  }
-  return normalized;
+  return groupMessagesByRole(messages);
 }

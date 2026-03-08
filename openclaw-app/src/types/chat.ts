@@ -19,13 +19,53 @@ export type MessageGroup = {
 };
 
 /** Content item types in a normalized message */
-export type MessageContentItem = {
-  type: "text" | "tool_call" | "tool_result" | "image";
+export interface MessageContentItemBase {
+  type: string;
+}
+
+export interface TextContentItem extends MessageContentItemBase {
+  type: "text";
   text?: string;
+}
+
+export interface ToolCallItem extends MessageContentItemBase {
+  type: "tool_call";
   name?: string;
   args?: unknown;
+}
+
+export interface ToolResultItem extends MessageContentItemBase {
+  type: "tool_result";
+  name?: string;
+  text?: string;
+}
+
+export interface ImageItem extends MessageContentItemBase {
+  type: "image";
+  url?: string;
   source?: { type: string; media_type?: string; data?: string };
-};
+}
+
+export interface ImageUrlItem extends MessageContentItemBase {
+  type: "image_url";
+  image_url?: { url?: string };
+}
+
+export interface ThinkingItem extends MessageContentItemBase {
+  type: "thinking";
+  thinking?: string;
+}
+
+export type MessageContentItem =
+  | TextContentItem
+  | ToolCallItem
+  | ToolResultItem
+  | ImageItem
+  | ImageUrlItem
+  | ThinkingItem;
+
+// Re-export for convenience
+export type { TextContentItem as TextItem, ToolCallItem as ToolCall, ToolResultItem as ToolResult };
 
 /** Normalized message structure for rendering */
 export interface NormalizedMessage {
@@ -49,6 +89,13 @@ export interface ChatMessage {
   content: MessageContentItem[] | string;
   timestamp: number;
   id?: string;
+  status?: "sending" | "sent" | "error" | "streaming";
+  session?: string;
+  messageType?: "chat" | "tool_call" | "tool_result" | "thought";
+  toolName?: string;
+  toolResult?: "running" | "success" | "error";
+  collapsed?: boolean;
+  text?: string; // Alternative text field for backward compatibility
 }
 
 /** Chat attachment for image uploads */
