@@ -63,6 +63,9 @@ export class GatewayClient {
   private connectSent = false;
   private connectTimer: number | null = null;
   private backoffMs = 800;
+  // Heartbeat timer for keeping connection alive
+  private heartbeatTimer: number | null = null;
+  private readonly HEARTBEAT_INTERVAL_MS = 20000; // Send ping every 20 seconds
 
   constructor(private opts: GatewayClientOptions) {}
 
@@ -78,6 +81,8 @@ export class GatewayClient {
       window.clearTimeout(this.connectTimer);
       this.connectTimer = null;
     }
+    // Clear heartbeat timer
+    this.stopHeartbeat();
     this.ws?.close();
     this.ws = null;
     this.flushPending(new Error("gateway client stopped"));
@@ -91,10 +96,14 @@ export class GatewayClient {
     if (this.closed) return;
     const url = this.opts.uid ? `${this.opts.url}?uid=${encodeURIComponent(this.opts.uid)}` : this.opts.url;
     this.ws = new WebSocket(url);
-    this.ws.addEventListener("open", () => this.queueConnect());
+    this.ws.addEventListener("open", () => {
+      this.queueConnect();
+      this.startHeartbeat();
+    });
     this.ws.addEventListener("message", (ev) => this.handleMessage(String(ev.data ?? "")));
     this.ws.addEventListener("close", (ev) => {
       const reason = String(ev.reason ?? "");
+      this.stopHeartbeat();
       this.ws = null;
       this.flushPending(new Error(`gateway closed (${ev.code}): ${reason}`));
       this.opts.onClose?.({ code: ev.code, reason });
@@ -103,6 +112,26 @@ export class GatewayClient {
     this.ws.addEventListener("error", () => {
       // ignored; close handler will fire
     });
+  }
+
+  // Start sending heartbeat ping messages
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = window.setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        const ping = { type: "ping", timestamp: Date.now() };
+        this.ws.send(JSON.stringify(ping));
+        console.log("[gateway] Sent ping");
+      }
+    }, this.HEARTBEAT_INTERVAL_MS);
+  }
+
+  // Stop heartbeat timer
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer !== null) {
+      window.clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   private scheduleReconnect() {
@@ -186,6 +215,12 @@ export class GatewayClient {
     }
 
     const frame = parsed as { type?: unknown };
+
+    // Handle pong response for heartbeat
+    if (frame.type === "pong") {
+      console.log("[gateway] Received pong");
+      return;
+    }
 
     // Handle Bridge response format (progress/complete/error)
     if (frame.type === "progress" || frame.type === "complete" || frame.type === "error") {

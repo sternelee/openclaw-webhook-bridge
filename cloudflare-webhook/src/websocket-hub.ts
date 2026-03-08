@@ -3,6 +3,18 @@ export interface Env {
   WEBSOCKET_HUB: DurableObjectNamespace;
 }
 
+// Application-level ping message type
+interface PingMessage {
+  type: "ping";
+  timestamp?: number;
+}
+
+// Application-level pong message type
+interface PongMessage {
+  type: "pong";
+  timestamp?: number;
+}
+
 // Durable Object for managing WebSocket connections
 // Uses in-memory state for connection tracking (works with hibernation)
 export class WebSocketHub {
@@ -14,8 +26,8 @@ export class WebSocketHub {
   private connectionTimestamps: Map<WebSocket, number> = new Map();
 
   // Configuration constants
-  private readonly HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
-  private readonly HEARTBEAT_TIMEOUT_MS = 120000; // 2 minutes
+  private readonly HEARTBEAT_INTERVAL_MS = 25000; // 25 seconds
+  private readonly HEARTBEAT_TIMEOUT_MS = 60000; // 60 seconds timeout
   private readonly MAX_CONNECTIONS_PER_UID = 10;
   private readonly GLOBAL_MAX_CONNECTIONS = 1000;
 
@@ -236,9 +248,25 @@ export class WebSocketHub {
       // Update last ping timestamp in memory
       this.connectionTimestamps.set(ws, Date.now());
 
-      // Log message type for debugging
+      // Handle application-level ping/pong for heartbeat
       try {
         const json = JSON.parse(messageStr);
+
+        // Handle ping - respond with pong
+        if (json.type === "ping") {
+          const pong: PongMessage = { type: "pong", timestamp: Date.now() };
+          ws.send(JSON.stringify(pong));
+          console.log(`[WebSocketHub] Sent pong to UID=${uid}`);
+          return; // Don't broadcast ping
+        }
+
+        // Handle pong - just update timestamp (already done above)
+        if (json.type === "pong") {
+          console.log(`[WebSocketHub] Received pong from UID=${uid}`);
+          return; // Don't broadcast pong
+        }
+
+        // Log message type for debugging
         const connectionsCount =
           this.connectionsByUID.get(uid || "")?.size || 0;
         console.log(
@@ -246,16 +274,20 @@ export class WebSocketHub {
             json.type || json.event || "unknown"
           }, connections: ${connectionsCount}`,
         );
-      } catch {
-        console.log(`[WebSocketHub] Message from UID=${uid}: (non-JSON)`);
-      }
 
-      // Broadcast to all connected clients with the SAME UID (no echo to sender)
-      if (uid) {
-        const sentCount = this.broadcastToUIDExcept(uid, messageStr, ws);
-        console.log(
-          `[WebSocketHub] Broadcast to UID=${uid}: ${sentCount} connections`,
-        );
+        // Broadcast to all connected clients with the SAME UID (no echo to sender)
+        if (uid) {
+          const sentCount = this.broadcastToUIDExcept(uid, messageStr, ws);
+          console.log(
+            `[WebSocketHub] Broadcast to UID=${uid}: ${sentCount} connections`,
+          );
+        }
+      } catch {
+        // Non-JSON message - treat as regular message
+        console.log(`[WebSocketHub] Message from UID=${uid}: (non-JSON)`);
+        if (uid) {
+          const sentCount = this.broadcastToUIDExcept(uid, messageStr, ws);
+        }
       }
     } catch (error) {
       console.error("[WebSocketHub] Error processing message:", error);
