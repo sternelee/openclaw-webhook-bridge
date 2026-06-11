@@ -249,6 +249,7 @@ async fn run_bridge() -> Result<()> {
         cfg.openclaw.gateway_token.clone(),
         cfg.openclaw.agent_id.clone(),
         &config_dir,
+        cfg.openclaw.protocol,
     )?;
 
     // Set event callback

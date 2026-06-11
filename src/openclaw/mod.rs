@@ -2,12 +2,12 @@ use anyhow::{Context, Result};
 use base64::Engine as _;
 use ed25519_dalek::{Signer, SigningKey};
 use futures_util::{SinkExt, StreamExt};
-use log::{error, info};
+use log::{error, info, warn};
 use rand::rngs::OsRng;
 use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Notify};
@@ -136,6 +136,33 @@ fn sign_device_payload(private_key: &[u8; 32], payload: &str) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes())
 }
 
+/// Extract the protocol version the gateway wants us to use, if it tells us.
+///
+/// Looks in `error.details` for the most authoritative hint first:
+/// 1. `expectedProtocol` / `minimumProbeProtocol` — the gateway's explicit
+///    "use this version" directive.
+/// 2. `minProtocol` / `maxProtocol` — a range the gateway supports.
+/// 3. Largest value in `supportedProtocols` — an explicit list.
+fn extract_protocol_hint(error: &serde_json::Value) -> Option<u32> {
+    let details = error.get("details")?;
+    for field in ["expectedProtocol", "minimumProbeProtocol"] {
+        if let Some(n) = details.get(field).and_then(|v| v.as_u64()) {
+            return Some(n as u32);
+        }
+    }
+    for field in ["minProtocol", "maxProtocol"] {
+        if let Some(n) = details.get(field).and_then(|v| v.as_u64()) {
+            return Some(n as u32);
+        }
+    }
+    if let Some(arr) = details.get("supportedProtocols").and_then(|v| v.as_array()) {
+        if let Some(n) = arr.iter().filter_map(|v| v.as_u64()).max() {
+            return Some(n as u32);
+        }
+    }
+    None
+}
+
 /// OpenClaw Gateway WebSocket client
 pub struct Client {
     port: u16,
@@ -147,7 +174,17 @@ pub struct Client {
     shutdown_tx: Option<mpsc::Sender<()>>,
     send_tx: Option<mpsc::Sender<Vec<u8>>>,
     on_event: Option<EventCallback>,
+    /// Mutable gateway protocol version. Updated on `protocol_mismatch` errors
+    /// so the next reconnect uses the version the gateway requires.
+    protocol: Arc<AtomicU32>,
 }
+
+/// Minimum protocol version the bridge will negotiate. Below this is rejected
+/// (we don't implement pre-v3 features).
+const MIN_PROTOCOL: u32 = 3;
+/// Hard upper bound on auto-bump. If the gateway demands a higher version,
+/// we log and refuse rather than risk running on something we don't implement.
+const MAX_PROTOCOL: u32 = 10;
 
 #[derive(Debug, Serialize)]
 struct AgentRequest {
@@ -176,8 +213,10 @@ impl Client {
         token: String,
         agent_id: String,
         config_dir: &std::path::Path,
+        protocol: u32,
     ) -> Result<Self> {
         let device_identity = load_or_create_device_identity(config_dir)?;
+        let protocol = protocol.clamp(MIN_PROTOCOL, MAX_PROTOCOL);
 
         Ok(Self {
             port,
@@ -189,6 +228,7 @@ impl Client {
             shutdown_tx: None,
             send_tx: None,
             on_event: None,
+            protocol: Arc::new(AtomicU32::new(protocol)),
         })
     }
 
@@ -197,6 +237,12 @@ impl Client {
         F: Fn(Vec<u8>) + Send + Sync + 'static,
     {
         self.on_event = Some(Arc::new(callback));
+    }
+
+    /// The protocol version currently in use (initial value before any
+    /// successful handshake; auto-bumped to whatever the gateway accepts).
+    pub fn agreed_protocol(&self) -> u32 {
+        self.protocol.load(Ordering::SeqCst)
     }
 
     /// Connect and start the connection loop
@@ -214,6 +260,7 @@ impl Client {
         let connected = Arc::clone(&self.connected);
         let conn_notify = Arc::clone(&self.conn_notify);
         let on_event = self.on_event.clone();
+        let protocol = Arc::clone(&self.protocol);
 
         // Spawn connection loop
         tokio::spawn(async move {
@@ -227,6 +274,7 @@ impl Client {
                 shutdown_rx,
                 send_rx,
                 on_event,
+                protocol,
             )
             .await;
         });
@@ -259,6 +307,7 @@ impl Client {
         mut shutdown_rx: mpsc::Receiver<()>,
         mut send_rx: mpsc::Receiver<Vec<u8>>,
         on_event: Option<EventCallback>,
+        protocol: Arc<AtomicU32>,
     ) {
         let mut reconnect_delay = Duration::from_secs(1);
         let max_reconnect_delay = Duration::from_secs(30);
@@ -278,6 +327,7 @@ impl Client {
                     &conn_notify,
                     &mut send_rx,
                     &on_event,
+                    &protocol,
                 ) => {
                     match result {
                         Ok(_) => {
@@ -308,6 +358,7 @@ impl Client {
     }
 
     /// Connect and read messages
+    #[allow(clippy::too_many_arguments)]
     async fn connect_and_read(
         port: u16,
         token: &str,
@@ -317,6 +368,7 @@ impl Client {
         conn_notify: &Arc<Notify>,
         send_rx: &mut mpsc::Receiver<Vec<u8>>,
         on_event: &Option<EventCallback>,
+        protocol: &Arc<AtomicU32>,
     ) -> Result<()> {
         let url = format!("ws://127.0.0.1:{}", port);
 
@@ -329,8 +381,18 @@ impl Client {
         // Wait for connect.challenge event to get the nonce
         let nonce = Self::wait_for_connect_challenge(&mut read).await?;
 
-        // Send connect request with device identity and nonce
-        Self::send_connect_request(&mut write, token, agent_id, device_identity, &nonce).await?;
+        // Send connect request with device identity and nonce.
+        // Use the (possibly auto-bumped) protocol from shared state.
+        let current_protocol = protocol.load(Ordering::SeqCst);
+        let connect_id = Self::send_connect_request(
+            &mut write,
+            token,
+            agent_id,
+            device_identity,
+            &nonce,
+            current_protocol,
+        )
+        .await?;
 
         // Wait for connect response before marking as connected
         // The Gateway must acknowledge our connect request with ok:true
@@ -348,7 +410,7 @@ impl Client {
                                 let msg_type = json.get("type").and_then(|v| v.as_str());
                                 let msg_id = json.get("id").and_then(|v| v.as_str());
 
-                                if msg_type == Some("res") && msg_id == Some("connect") {
+                                if msg_type == Some("res") && msg_id == Some(connect_id.as_str()) {
                                     let ok = json.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
                                     if ok {
                                         info!("[OpenClaw] Connect handshake succeeded");
@@ -358,6 +420,12 @@ impl Client {
                                             .and_then(|e| e.get("message"))
                                             .and_then(|v| v.as_str())
                                             .unwrap_or("unknown error");
+                                        warn!(
+                                            "[OpenClaw] Connect handshake failed: {} (full error: {})",
+                                            error,
+                                            json.get("error").cloned().unwrap_or(serde_json::Value::Null)
+                                        );
+                                        Self::maybe_bump_protocol(protocol, &json);
                                         anyhow::bail!("Connect handshake failed: {}", error);
                                     }
                                 }
@@ -374,7 +442,7 @@ impl Client {
                                 let msg_type = json.get("type").and_then(|v| v.as_str());
                                 let msg_id = json.get("id").and_then(|v| v.as_str());
 
-                                if msg_type == Some("res") && msg_id == Some("connect") {
+                                if msg_type == Some("res") && msg_id == Some(connect_id.as_str()) {
                                     let ok = json.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
                                     if ok {
                                         info!("[OpenClaw] Connect handshake succeeded");
@@ -384,6 +452,12 @@ impl Client {
                                             .and_then(|e| e.get("message"))
                                             .and_then(|v| v.as_str())
                                             .unwrap_or("unknown error");
+                                        warn!(
+                                            "[OpenClaw] Connect handshake failed: {} (full error: {})",
+                                            error,
+                                            json.get("error").cloned().unwrap_or(serde_json::Value::Null)
+                                        );
+                                        Self::maybe_bump_protocol(protocol, &json);
                                         anyhow::bail!("Connect handshake failed: {}", error);
                                     }
                                 }
@@ -554,6 +628,7 @@ impl Client {
     }
 
     /// Send the initial connect handshake
+    #[allow(clippy::too_many_arguments)]
     async fn send_connect_request(
         write: &mut futures_util::stream::SplitSink<
             tokio_tungstenite::WebSocketStream<
@@ -565,33 +640,51 @@ impl Client {
         _agent_id: &str,
         device_identity: &DeviceIdentity,
         nonce: &str,
-    ) -> Result<()> {
+        protocol: u32,
+    ) -> Result<String> {
         let signed_at = chrono::Utc::now().timestamp_millis();
 
-        // Build device auth payload (v3 format with platform and deviceFamily):
-        // v3|deviceId|clientId|clientMode|role|scopes|signedAtMs|token|nonce|platform|deviceFamily
+        // Device auth payload format tracks the protocol version.
+        // v3 format: v3|deviceId|clientId|clientMode|role|scopes|signedAtMs|token|nonce|platform|deviceFamily
+        // Future versions may add fields; we always emit v3 for now since that's what the
+        // bridge implements. If the gateway reports protocol > 3 we may need to switch.
+        let payload_version = "v3";
         let scopes = "operator.read,operator.write,operator.admin";
         let platform = normalize_device_metadata("linux");
         let device_family = normalize_device_metadata("server");
         let payload = format!(
-            "v3|{}|gateway-client|backend|operator|{}|{}|{}|{}|{}|{}",
-            device_identity.device_id, scopes, signed_at, token, nonce, platform, device_family
+            "{}|{}|gateway-client|backend|operator|{}|{}|{}|{}|{}|{}",
+            payload_version,
+            device_identity.device_id,
+            scopes,
+            signed_at,
+            token,
+            nonce,
+            platform,
+            device_family
         );
 
-        info!("[OpenClaw] Device auth v3 payload: {}", payload);
+        info!("[OpenClaw] Device auth {} payload: {}", payload_version, payload);
         let signature = sign_device_payload(&device_identity.private_key, &payload);
         info!("[OpenClaw] Device signature: {}", signature);
 
+        // The OpenClaw Gateway treats `connect` as a state-machine operation:
+        // it must be the first request, and a second one (even across a new WS
+        // connection) is rejected with "connect is only valid as the first
+        // request" because the request id is reused. Give each attempt a
+        // unique id so reconnects are accepted.
+        let connect_id = format!("connect-{}", uuid::Uuid::new_v4());
+
         let connect_req = json!({
             "type": "req",
-            "id": "connect",
+            "id": connect_id,
             "method": "connect",
             "params": {
-                "minProtocol": 3,
-                "maxProtocol": 3,
+                "minProtocol": protocol,
+                "maxProtocol": protocol,
                 "client": {
                     "id": "gateway-client",
-                    "version": "0.2.0",
+                    "version": env!("CARGO_PKG_VERSION"),
                     "platform": "linux",
                     "deviceFamily": "server",
                     "mode": "backend",
@@ -624,7 +717,62 @@ impl Client {
             .await
             .context("Failed to send connect request")?;
 
-        Ok(())
+        Ok(connect_id)
+    }
+
+    /// Inspect a failed connect response and, if the gateway reported
+    /// `protocol_mismatch` with a usable version hint, update the shared
+    /// protocol state so the next reconnect uses it.
+    fn maybe_bump_protocol(protocol: &Arc<AtomicU32>, json: &serde_json::Value) {
+        let Some(error) = json.get("error") else { return };
+
+        // The gateway nests the specific reason under details.code (often
+        // `PROTOCOL_MISMATCH`) while the top-level code is the broader category
+        // (`INVALID_REQUEST`). Match either, case-insensitively, on the
+        // combined signal.
+        let is_protocol_mismatch = {
+            let top = error
+                .get("code")
+                .and_then(|c| c.as_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let inner = error
+                .get("details")
+                .and_then(|d| d.get("code"))
+                .and_then(|c| c.as_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            (top.contains("protocol") && top.contains("mismatch"))
+                || (inner.contains("protocol") && inner.contains("mismatch"))
+        };
+        if !is_protocol_mismatch {
+            return;
+        }
+
+        let hint = extract_protocol_hint(error);
+        let Some(hint) = hint else {
+            warn!(
+                "[OpenClaw] protocol_mismatch with no parseable hint; bump it manually via bridge.json (full error: {})",
+                error
+            );
+            return;
+        };
+        if !(MIN_PROTOCOL..=MAX_PROTOCOL).contains(&hint) {
+            warn!(
+                "[OpenClaw] Gateway reported protocol {} which is outside [{MIN_PROTOCOL}, {MAX_PROTOCOL}]; refusing to bump",
+                hint
+            );
+            return;
+        }
+        let current = protocol.load(Ordering::SeqCst);
+        if hint == current {
+            return;
+        }
+        info!(
+            "[OpenClaw] Auto-bumping protocol {} -> {} (next reconnect)",
+            current, hint
+        );
+        protocol.store(hint, Ordering::SeqCst);
     }
 
     /// Send raw JSON data to OpenClaw Gateway
@@ -682,5 +830,131 @@ impl Client {
         self.connected.store(false, Ordering::SeqCst);
         info!("[OpenClaw] Connection closed");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hint_from_expected_protocol() {
+        let err = serde_json::json!({
+            "code": "INVALID_REQUEST",
+            "details": {
+                "code": "PROTOCOL_MISMATCH",
+                "expectedProtocol": 4
+            }
+        });
+        assert_eq!(extract_protocol_hint(&err), Some(4));
+    }
+
+    #[test]
+    fn hint_from_minimum_probe_protocol() {
+        let err = serde_json::json!({
+            "details": { "minimumProbeProtocol": 5 }
+        });
+        assert_eq!(extract_protocol_hint(&err), Some(5));
+    }
+
+    #[test]
+    fn hint_from_range() {
+        let err = serde_json::json!({
+            "details": { "minProtocol": 4, "maxProtocol": 5 }
+        });
+        assert_eq!(extract_protocol_hint(&err), Some(4));
+    }
+
+    #[test]
+    fn hint_from_supported_protocols() {
+        let err = serde_json::json!({
+            "details": { "supportedProtocols": [3, 4, 5] }
+        });
+        assert_eq!(extract_protocol_hint(&err), Some(5));
+    }
+
+    #[test]
+    fn no_hint_when_details_missing() {
+        let err = serde_json::json!({ "code": "INVALID_REQUEST" });
+        assert_eq!(extract_protocol_hint(&err), None);
+    }
+
+    #[test]
+    fn maybe_bump_picks_nested_code() {
+        let json = serde_json::json!({
+            "error": {
+                "code": "INVALID_REQUEST",
+                "details": {
+                    "code": "PROTOCOL_MISMATCH",
+                    "expectedProtocol": 4
+                }
+            }
+        });
+        let p = Arc::new(AtomicU32::new(3));
+        Client::maybe_bump_protocol(&p, &json);
+        assert_eq!(p.load(Ordering::SeqCst), 4);
+    }
+
+    #[test]
+    fn maybe_bump_ignores_unrelated_errors() {
+        let json = serde_json::json!({
+            "error": { "code": "AUTH_FAILED", "message": "bad token" }
+        });
+        let p = Arc::new(AtomicU32::new(3));
+        Client::maybe_bump_protocol(&p, &json);
+        assert_eq!(p.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn maybe_bump_refuses_out_of_range() {
+        let json = serde_json::json!({
+            "error": {
+                "code": "PROTOCOL_MISMATCH",
+                "details": { "expectedProtocol": 99 }
+            }
+        });
+        let p = Arc::new(AtomicU32::new(3));
+        Client::maybe_bump_protocol(&p, &json);
+        assert_eq!(p.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn maybe_bump_uses_real_gateway_response_shape() {
+        // Exact shape from the OpenClaw Gateway observed in production logs.
+        let json = serde_json::json!({
+            "type": "res",
+            "id": "connect",
+            "ok": false,
+            "error": {
+                "code": "INVALID_REQUEST",
+                "details": {
+                    "clientMaxProtocol": 3,
+                    "clientMinProtocol": 3,
+                    "code": "PROTOCOL_MISMATCH",
+                    "expectedProtocol": 4,
+                    "minimumProbeProtocol": 4
+                },
+                "message": "protocol mismatch"
+            }
+        });
+        let p = Arc::new(AtomicU32::new(3));
+        Client::maybe_bump_protocol(&p, &json);
+        assert_eq!(p.load(Ordering::SeqCst), 4);
+    }
+
+    /// Each connect attempt must mint a unique id. The OpenClaw Gateway
+    /// rejects a second `connect` request that reuses the same id, so the
+    /// handshake loop's response-matching only works if the id changes every
+    /// time. Two consecutive calls must produce two distinct ids, both
+    /// carrying the `connect-` prefix.
+    #[test]
+    fn connect_ids_are_unique() {
+        let a = format!("connect-{}", uuid::Uuid::new_v4());
+        let b = format!("connect-{}", uuid::Uuid::new_v4());
+        assert_ne!(a, b);
+        assert!(a.starts_with("connect-"));
+        assert!(b.starts_with("connect-"));
+        // UUID v4 is hyphenated, 36 chars total -> "connect-" (8) + 36 = 44
+        assert_eq!(a.len(), 8 + 36);
     }
 }

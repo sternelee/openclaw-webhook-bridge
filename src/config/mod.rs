@@ -21,6 +21,14 @@ pub struct OpenClawConfig {
     pub gateway_port: u16,
     pub gateway_token: String,
     pub agent_id: String,
+    /// Gateway protocol version to negotiate. Defaults to 3.
+    /// Auto-bumped on `protocol_mismatch` if the gateway reports a higher version.
+    #[serde(default = "default_protocol")]
+    pub protocol: u32,
+}
+
+fn default_protocol() -> u32 {
+    3
 }
 
 /// Structure matching ~/.openclaw/openclaw.json
@@ -48,6 +56,9 @@ pub struct BridgeJSON {
     pub agent_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uid: Option<String>,
+    /// Override the gateway protocol version. Omit to use default (3, auto-bumped).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<u32>,
 }
 
 /// Get the config directory path
@@ -115,6 +126,7 @@ pub fn load() -> Result<Config> {
             gateway_port,
             gateway_token: gw_cfg.gateway.auth.token,
             agent_id,
+            protocol: br_cfg.protocol.unwrap_or(3),
         },
         uid,
         session_store_path,
@@ -253,12 +265,14 @@ fn save_bridge_config_partially(
             webhook_url: String::new(),
             agent_id: None,
             uid: None,
+            protocol: None,
         })
     } else {
         BridgeJSON {
             webhook_url: String::new(),
             agent_id: None,
             uid: None,
+            protocol: None,
         }
     };
 
