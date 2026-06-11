@@ -134,7 +134,6 @@ pub fn build_webhook_session_key(params: &WebhookSessionParams) -> Option<String
 /// Session control message types
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-#[allow(dead_code)]
 #[allow(clippy::enum_variant_names)]
 pub enum ControlMessageType {
     SessionGet,
@@ -145,7 +144,6 @@ pub enum ControlMessageType {
 
 /// Session control message
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct SessionControlMessage {
     #[serde(rename = "type")]
     pub msg_type: ControlMessageType,
@@ -157,7 +155,6 @@ pub struct SessionControlMessage {
 
 /// Session info response
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct SessionInfoResponse {
     pub key: String,
     #[serde(rename = "sessionId")]
@@ -174,7 +171,6 @@ pub struct SessionInfoResponse {
 
 /// Session list response
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct SessionListResponse {
     pub sessions: Vec<SessionInfoResponse>,
     pub count: usize,

@@ -136,6 +136,28 @@ impl Store {
         Ok(store.get(key).cloned())
     }
 
+    /// Delete a session entry. Returns true if a row was removed.
+    #[allow(dead_code)]
+    pub fn delete_entry(&self, key: &str) -> Result<bool> {
+        let mut removed = false;
+        self.update(|store| {
+            removed = store.remove(key).is_some();
+            Ok(())
+        })?;
+        Ok(removed)
+    }
+
+    /// Find the (key, entry) pair whose session_id matches.
+    /// Scans the full store; O(n). Used for `session.get` by id lookup.
+    #[allow(dead_code)]
+    pub fn find_by_session_id(&self, session_id: &str) -> Result<Option<(String, SessionEntry)>> {
+        let store = self.load()?;
+        Ok(store
+            .iter()
+            .find(|(_, v)| v.session_id == session_id)
+            .map(|(k, v)| (k.clone(), v.clone())))
+    }
+
     /// Update a session entry using a callback
     pub fn update_entry<F>(&self, key: &str, f: F) -> Result<SessionEntry>
     where
@@ -226,5 +248,81 @@ impl Store {
 
             Ok(entry)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::path::PathBuf;
+
+    fn temp_store(name: &str) -> Store {
+        let mut path: PathBuf = env::temp_dir();
+        path.push(format!(
+            "openclaw-sessions-test-{}-{}.json",
+            name,
+            uuid::Uuid::new_v4()
+        ));
+        let _ = std::fs::remove_file(&path);
+        Store::new(StoreConfig::new(path))
+    }
+
+    fn ctx(channel: &str, to: &str) -> DeliveryContext {
+        DeliveryContext {
+            channel: Some(channel.to_string()),
+            to: Some(to.to_string()),
+            account_id: Some("uid-test".to_string()),
+            thread_id: None,
+        }
+    }
+
+    #[test]
+    fn record_and_get_entry_round_trips() {
+        let store = temp_store("rt");
+        let entry = store
+            .record_inbound_meta("webhook:msg-1", "msg-1", &ctx("webhook", "msg-1"))
+            .expect("record");
+        let got = store.get_entry("webhook:msg-1").expect("get");
+        assert_eq!(got.unwrap().session_id, entry.session_id);
+    }
+
+    #[test]
+    fn delete_entry_returns_true_when_present() {
+        let store = temp_store("del-yes");
+        store
+            .record_inbound_meta("k1", "m1", &ctx("webhook", "m1"))
+            .unwrap();
+        assert!(store.delete_entry("k1").unwrap());
+        assert!(store.get_entry("k1").unwrap().is_none());
+    }
+
+    #[test]
+    fn delete_entry_returns_false_when_absent() {
+        let store = temp_store("del-no");
+        assert!(!store.delete_entry("nope").unwrap());
+    }
+
+    #[test]
+    fn find_by_session_id_returns_owner_key() {
+        let store = temp_store("find");
+        store
+            .record_inbound_meta("webhook:a", "a", &ctx("webhook", "a"))
+            .unwrap();
+        let entry = store
+            .record_inbound_meta("webhook:b", "b", &ctx("webhook", "b"))
+            .unwrap();
+        let (key, found) = store
+            .find_by_session_id(&entry.session_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(key, "webhook:b");
+        assert_eq!(found.session_id, entry.session_id);
+    }
+
+    #[test]
+    fn find_by_session_id_returns_none_when_missing() {
+        let store = temp_store("find-miss");
+        assert!(store.find_by_session_id("nope").unwrap().is_none());
     }
 }

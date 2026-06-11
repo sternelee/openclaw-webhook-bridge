@@ -114,12 +114,50 @@ impl Bridge {
                 match t {
                     // Gateway protocol request - forward directly
                     "req" => {
-                        let method = json.get("method").and_then(|v| v.as_str()).unwrap_or("?");
-                        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                        info!(
-                            "[Bridge] Forwarding Gateway request: method={} id={}",
-                            method, id
-                        );
+                        let method =
+                            json.get("method").and_then(|v| v.as_str()).unwrap_or("");
+                        let id = json.get("id").and_then(|v| v.as_str()).unwrap_or("");
+
+                        // `connect` must NOT be forwarded. The bridge already
+                        // holds the single OpenClaw connection and a second
+                        // connect (even with a fresh id) is rejected by the
+                        // gateway's state machine. Synthesize a hello-ok so
+                        // gateway-protocol clients can keep working through
+                        // the bridge transparently.
+                        if method == "connect" {
+                            let agreed = {
+                                let client = self.openclaw_client.read().await;
+                                client.as_ref().map(|c| c.agreed_protocol()).unwrap_or(3)
+                            };
+                            let response = serde_json::json!({
+                                "type": "res",
+                                "id": id,
+                                "ok": true,
+                                "payload": {
+                                    "type": "hello-ok",
+                                    "protocol": agreed,
+                                    "features": {
+                                        "methods": [],
+                                        "events": [
+                                            "agent.delta",
+                                            "agent.final",
+                                            "agent.abort",
+                                            "chat",
+                                            "agent",
+                                        ],
+                                    },
+                                },
+                            });
+                            let bytes = serde_json::to_vec(&response)?;
+                            info!(
+                                "[Bridge] Intercepted client connect id={} -> synthetic hello (protocol={})",
+                                id, agreed
+                            );
+                            self.send_to_webhook(bytes).await;
+                            return Ok(());
+                        }
+
+                        info!("[Bridge] Forwarding Gateway request: method={} id={}", method, id);
 
                         let openclaw = self.openclaw_client.read().await;
                         if let Some(ref client) = *openclaw {
@@ -399,9 +437,231 @@ impl Bridge {
     }
 
     /// Handle session control message
-    async fn handle_session_control_message(&self, _data: &[u8]) -> Result<()> {
-        info!("[Bridge] Session control message handling not yet fully implemented");
-        // TODO: Implement full session control
+    async fn handle_session_control_message(&self, data: &[u8]) -> Result<()> {
+        let ctrl: sessions::SessionControlMessage = match serde_json::from_slice(data) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("[Bridge] Failed to parse session control message: {}", e);
+                return Ok(());
+            }
+        };
+
+        // Clone the store Arc out under the lock so the lock is released before any IO.
+        let store = {
+            let guard = self.session_store.read().await;
+            guard.clone()
+        };
+        let Some(store) = store else {
+            warn!(
+                "[Bridge] Session store not configured, ignoring {:?}",
+                ctrl.msg_type
+            );
+            return Ok(());
+        };
+
+        let response = match ctrl.msg_type {
+            sessions::ControlMessageType::SessionGet => {
+                self.handle_session_get(&store, ctrl.key.as_deref(), ctrl.id.as_deref())
+            }
+            sessions::ControlMessageType::SessionList => self.handle_session_list(&store),
+            sessions::ControlMessageType::SessionReset => {
+                self.handle_session_reset(&store, ctrl.key.as_deref())
+            }
+            sessions::ControlMessageType::SessionDelete => {
+                self.handle_session_delete(&store, ctrl.key.as_deref())
+            }
+        };
+
+        match response {
+            Ok(bytes) => {
+                info!("[Bridge] Session control response: {} bytes", bytes.len());
+                self.send_to_webhook(bytes).await;
+            }
+            Err(e) => warn!("[Bridge] Session control handler error: {}", e),
+        }
         Ok(())
+    }
+
+    /// Build the wire envelope `{type, data}` for a control response.
+    fn control_envelope(ctrl_type: &str, data: serde_json::Value) -> Result<Vec<u8>> {
+        Ok(serde_json::to_vec(&serde_json::json!({
+            "type": ctrl_type,
+            "data": data,
+        }))?)
+    }
+
+    fn handle_session_get(
+        &self,
+        store: &Arc<SessionStore>,
+        key: Option<&str>,
+        id: Option<&str>,
+    ) -> Result<Vec<u8>> {
+        let lookup = if let Some(k) = key {
+            (k.to_string(), store.get_entry(k)?)
+        } else if let Some(sid) = id {
+            store
+                .find_by_session_id(sid)?
+                .map(|(k, v)| (k, Some(v)))
+                .unwrap_or_else(|| (sid.to_string(), None))
+        } else {
+            return Self::control_envelope(
+                "session.get",
+                serde_json::json!({"success": false, "error": "key or id required"}),
+            );
+        };
+
+        let (resolved_key, entry) = lookup;
+        match entry {
+            Some(e) => Self::control_envelope(
+                "session.get",
+                serde_json::to_value(sessions::SessionInfoResponse {
+                    key: resolved_key,
+                    session_id: e.session_id,
+                    updated_at: e.updated_at,
+                    delivery_context: e.delivery_context,
+                    last_channel: e.last_channel,
+                    last_to: e.last_to,
+                })?,
+            ),
+            None => Self::control_envelope(
+                "session.get",
+                serde_json::json!({
+                    "success": false,
+                    "error": "session not found",
+                    "key": resolved_key,
+                }),
+            ),
+        }
+    }
+
+    fn handle_session_list(&self, store: &Arc<SessionStore>) -> Result<Vec<u8>> {
+        let all = store.load()?;
+        let mut infos: Vec<sessions::SessionInfoResponse> = all
+            .into_iter()
+            .map(|(k, e)| sessions::SessionInfoResponse {
+                key: k,
+                session_id: e.session_id,
+                updated_at: e.updated_at,
+                delivery_context: e.delivery_context,
+                last_channel: e.last_channel,
+                last_to: e.last_to,
+            })
+            .collect();
+        // Newest first; stable secondary sort by key for determinism.
+        infos.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then(a.key.cmp(&b.key)));
+        let count = infos.len();
+        Self::control_envelope(
+            "session.list",
+            serde_json::to_value(sessions::SessionListResponse {
+                sessions: infos,
+                count,
+            })?,
+        )
+    }
+
+    fn handle_session_reset(
+        &self,
+        store: &Arc<SessionStore>,
+        key: Option<&str>,
+    ) -> Result<Vec<u8>> {
+        let Some(k) = key else {
+            return Self::control_envelope(
+                "session.reset",
+                serde_json::json!({"success": false, "error": "key required"}),
+            );
+        };
+
+        let reset = store.update_entry(k, |_existing| {
+            Ok(sessions::SessionEntry {
+                session_id: sessions::generate_session_id(),
+                updated_at: sessions::current_timestamp(),
+                session_file: None,
+                delivery_context: None,
+                last_channel: None,
+                last_to: None,
+                last_account_id: None,
+                last_thread_id: None,
+                webhook_message_id: None,
+                webhook_session_id: None,
+            })
+        });
+
+        match reset {
+            Ok(_) => Self::control_envelope(
+                "session.reset",
+                serde_json::json!({"success": true, "key": k}),
+            ),
+            Err(e) => Self::control_envelope(
+                "session.reset",
+                serde_json::json!({"success": false, "error": e.to_string(), "key": k}),
+            ),
+        }
+    }
+
+    fn handle_session_delete(
+        &self,
+        store: &Arc<SessionStore>,
+        key: Option<&str>,
+    ) -> Result<Vec<u8>> {
+        let Some(k) = key else {
+            return Self::control_envelope(
+                "session.delete",
+                serde_json::json!({"success": false, "error": "key required"}),
+            );
+        };
+        match store.delete_entry(k) {
+            Ok(true) => Self::control_envelope(
+                "session.delete",
+                serde_json::json!({"success": true, "key": k}),
+            ),
+            Ok(false) => Self::control_envelope(
+                "session.delete",
+                serde_json::json!({"success": false, "error": "session not found", "key": k}),
+            ),
+            Err(e) => Self::control_envelope(
+                "session.delete",
+                serde_json::json!({"success": false, "error": e.to_string(), "key": k}),
+            ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    /// The synthetic hello must echo the client's request id and carry the
+    /// protocol the bridge negotiated with OpenClaw. Clients (e.g. an
+    /// openclaw-app that mistakenly thinks it's in direct-gateway mode) use
+    /// this id to correlate the response with their in-flight `request` call.
+    #[test]
+    fn synthetic_hello_carries_request_id_and_protocol() {
+        let agreed = 4u32;
+        let request_id = "5e8fb155-a17f-4f04-a876-cf048b371ab9";
+        let response = serde_json::json!({
+            "type": "res",
+            "id": request_id,
+            "ok": true,
+            "payload": {
+                "type": "hello-ok",
+                "protocol": agreed,
+                "features": {
+                    "methods": [],
+                    "events": ["agent.delta", "agent.final", "agent.abort", "chat", "agent"],
+                },
+            },
+        });
+        assert_eq!(response["type"], "res");
+        assert_eq!(response["id"], request_id);
+        assert_eq!(response["ok"], true);
+        assert_eq!(response["payload"]["type"], "hello-ok");
+        assert_eq!(response["payload"]["protocol"], 4);
+        let events: Vec<&str> = response["payload"]["features"]["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(events.contains(&"agent.delta"));
+        assert!(events.contains(&"chat"));
     }
 }

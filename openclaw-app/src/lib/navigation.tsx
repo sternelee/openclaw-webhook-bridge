@@ -8,19 +8,21 @@ import type { IconName } from "@/components/ui/icons";
 
 export const TAB_GROUPS = [
   { label: "Chat", tabs: ["chat"] },
+  { label: "Sessions", tabs: ["sessions"] },
   { label: "Settings", tabs: ["settings"] },
 ] as const;
 
-export type Tab =
-  | "chat"
-  | "settings";
+export type Tab = "chat" | "sessions" | "settings";
 
 const TAB_PATHS: Record<Tab, string> = {
   chat: "/chat",
+  sessions: "/sessions",
   settings: "/settings",
 };
 
-const PATH_TO_TAB = new Map(Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]));
+const PATH_TO_TAB = new Map(
+  Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]),
+);
 
 export function normalizePath(path: string): string {
   if (!path) {
@@ -56,6 +58,8 @@ export function iconForTab(tab: Tab): IconName {
   switch (tab) {
     case "chat":
       return "messageSquare";
+    case "sessions":
+      return "database";
     case "settings":
       return "settings";
     default:
@@ -67,6 +71,8 @@ export function titleForTab(tab: Tab) {
   switch (tab) {
     case "chat":
       return "Chat";
+    case "sessions":
+      return "Bridge Sessions";
     case "settings":
       return "Settings";
     default:
@@ -78,6 +84,8 @@ export function subtitleForTab(tab: Tab) {
   switch (tab) {
     case "chat":
       return "Direct gateway chat session for quick interventions.";
+    case "sessions":
+      return "Inspect, reset, or delete sessions tracked by the Rust Bridge.";
     case "settings":
       return "Edit ~/.openclaw/openclaw.json safely.";
     default:

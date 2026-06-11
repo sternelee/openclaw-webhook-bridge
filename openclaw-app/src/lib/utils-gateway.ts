@@ -9,6 +9,9 @@ import type {
   GatewayHelloOk,
   GatewayRequestFrame,
   GatewayResponseFrame,
+  SessionControlRequest,
+  SessionControlResponse,
+  SessionControlType,
 } from "@/types";
 
 type Pending = {
@@ -52,11 +55,15 @@ export interface BridgeErrorResponse extends BridgeResponseBase {
   content: string; // Error message
 }
 
-export type BridgeResponse = BridgeProgressResponse | BridgeCompleteResponse | BridgeErrorResponse;
+export type BridgeResponse =
+  | BridgeProgressResponse
+  | BridgeCompleteResponse
+  | BridgeErrorResponse;
 
 export class GatewayClient {
   private ws: WebSocket | null = null;
   private pending = new Map<string, Pending>();
+  private pendingControl = new Map<string, Pending>();
   private closed = false;
   private lastSeq: number | null = null;
   private _connectNonce: string | null = null;
@@ -86,6 +93,7 @@ export class GatewayClient {
     this.ws?.close();
     this.ws = null;
     this.flushPending(new Error("gateway client stopped"));
+    this.flushPendingControl(new Error("gateway client stopped"));
   }
 
   get connected() {
@@ -94,13 +102,17 @@ export class GatewayClient {
 
   private connect() {
     if (this.closed) return;
-    const url = this.opts.uid ? `${this.opts.url}?uid=${encodeURIComponent(this.opts.uid)}` : this.opts.url;
+    const url = this.opts.uid
+      ? `${this.opts.url}?uid=${encodeURIComponent(this.opts.uid)}`
+      : this.opts.url;
     this.ws = new WebSocket(url);
     this.ws.addEventListener("open", () => {
       this.queueConnect();
       this.startHeartbeat();
     });
-    this.ws.addEventListener("message", (ev) => this.handleMessage(String(ev.data ?? "")));
+    this.ws.addEventListener("message", (ev) =>
+      this.handleMessage(String(ev.data ?? "")),
+    );
     this.ws.addEventListener("close", (ev) => {
       const reason = String(ev.reason ?? "");
       this.stopHeartbeat();
@@ -148,6 +160,13 @@ export class GatewayClient {
     this.pending.clear();
   }
 
+  private flushPendingControl(err: Error) {
+    for (const [, p] of this.pendingControl) {
+      p.reject(err);
+    }
+    this.pendingControl.clear();
+  }
+
   private async sendConnect() {
     if (this.connectSent) return;
     this.connectSent = true;
@@ -163,7 +182,10 @@ export class GatewayClient {
       const mockHello: GatewayHelloOk = {
         type: "hello-ok",
         protocol: 3,
-        features: { methods: [], events: ["agent.delta", "agent.final", "agent.error"] },
+        features: {
+          methods: [],
+          events: ["agent.delta", "agent.final", "agent.error"],
+        },
       };
       this.opts.onHello?.(mockHello);
       return;
@@ -185,14 +207,18 @@ export class GatewayClient {
       client: {
         id: this.opts.clientName ?? "openclaw-webchat",
         version: this.opts.clientVersion ?? "dev",
-        platform: this.opts.platform ?? typeof navigator !== "undefined" ? navigator.platform ?? "web" : "web",
+        platform:
+          (this.opts.platform ?? typeof navigator !== "undefined")
+            ? (navigator.platform ?? "web")
+            : "web",
         mode: this.opts.mode ?? "webchat",
         instanceId: this.opts.instanceId,
       },
       role,
       scopes,
       auth,
-      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
+      userAgent:
+        typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
       locale: typeof navigator !== "undefined" ? navigator.language : "en",
     };
 
@@ -223,10 +249,14 @@ export class GatewayClient {
     }
 
     // Handle Bridge response format (progress/complete/error)
-    if (frame.type === "progress" || frame.type === "complete" || frame.type === "error") {
+    if (
+      frame.type === "progress" ||
+      frame.type === "complete" ||
+      frame.type === "error"
+    ) {
       const bridgeRes = parsed as BridgeResponse;
       console.log("[gateway] Bridge response:", bridgeRes);
-      
+
       // Convert Bridge response to Gateway event format for compatibility
       if (bridgeRes.type === "progress" || bridgeRes.type === "complete") {
         // For progress/complete, send as agent.delta (streaming)
@@ -243,7 +273,7 @@ export class GatewayClient {
         } catch (err) {
           console.error("[gateway] bridge response handler error:", err);
         }
-        
+
         // If complete, also send final event to stop streaming
         if (bridgeRes.type === "complete") {
           const finalEvt: GatewayEventFrame = {
@@ -287,7 +317,8 @@ export class GatewayClient {
       const evt = parsed as GatewayEventFrame;
       if (evt.event === "connect.challenge") {
         const payload = evt.payload as { nonce?: unknown } | undefined;
-        const nonce = payload && typeof payload.nonce === "string" ? payload.nonce : null;
+        const nonce =
+          payload && typeof payload.nonce === "string" ? payload.nonce : null;
         if (nonce) {
           this._connectNonce = nonce;
           void this.sendConnect();
@@ -311,7 +342,11 @@ export class GatewayClient {
 
     if (frame.type === "res") {
       const res = parsed as GatewayResponseFrame;
-      console.log("[gateway] Received response:", res.id, res.ok ? "ok" : "error");
+      console.log(
+        "[gateway] Received response:",
+        res.id,
+        res.ok ? "ok" : "error",
+      );
 
       // Also emit as event for UI display (e.g., tool call results)
       const resEvent: GatewayEventFrame = {
@@ -343,6 +378,29 @@ export class GatewayClient {
       }
       return;
     }
+
+    // Bridge session control response envelope: {type:"session.x", data:..., __ctrlId}
+    if (
+      typeof frame.type === "string" &&
+      (frame.type === "session.get" ||
+        frame.type === "session.list" ||
+        frame.type === "session.reset" ||
+        frame.type === "session.delete")
+    ) {
+      const ctrl = parsed as SessionControlResponse & { __ctrlId?: string };
+      const ctrlId = ctrl.__ctrlId;
+      try {
+        this.opts.onSessionControl?.(ctrl);
+      } catch (err) {
+        console.error("[gateway] session control handler error:", err);
+      }
+      if (ctrlId && this.pendingControl.has(ctrlId)) {
+        const pending = this.pendingControl.get(ctrlId)!;
+        this.pendingControl.delete(ctrlId);
+        pending.resolve({ type: ctrl.type, data: ctrl.data });
+      }
+      return;
+    }
   }
 
   request<T = unknown>(method: string, params?: unknown): Promise<T> {
@@ -369,6 +427,44 @@ export class GatewayClient {
       return;
     }
     this.ws.send(JSON.stringify(msg));
+  }
+
+  /**
+   * Send a bridge session control request (`session.get|list|reset|delete`).
+   * Returns a promise that resolves with the raw `{type, data}` envelope,
+   * or rejects on timeout / disconnect / malformed response.
+   */
+  sendSessionControl<T = unknown>(
+    ctrl: SessionControlRequest,
+    timeoutMs: number = 5000,
+  ): Promise<{ type: SessionControlType; data: T }> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error("gateway not connected"));
+    }
+    const id = `ctrl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const frame = { ...ctrl, __ctrlId: id };
+    console.log("[gateway] Sending session control:", ctrl.type, id);
+    const p = new Promise<{ type: SessionControlType; data: T }>(
+      (resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          if (this.pendingControl.delete(id)) {
+            reject(new Error(`session control ${ctrl.type} timed out`));
+          }
+        }, timeoutMs);
+        this.pendingControl.set(id, {
+          resolve: (v) => {
+            window.clearTimeout(timer);
+            resolve(v as { type: SessionControlType; data: T });
+          },
+          reject: (e) => {
+            window.clearTimeout(timer);
+            reject(e);
+          },
+        });
+      },
+    );
+    this.ws.send(JSON.stringify(frame));
+    return p;
   }
 
   private queueConnect() {

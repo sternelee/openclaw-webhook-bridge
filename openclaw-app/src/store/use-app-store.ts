@@ -2,9 +2,9 @@
  * Zustand store for OpenClaw web app state management.
  */
 
-import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
-import type { GatewayClient, WebhookMessage } from '@/lib/utils-gateway';
+import { create } from "zustand";
+import { devtools, persist } from "zustand/middleware";
+import type { GatewayClient, WebhookMessage } from "@/lib/utils-gateway";
 import type {
   ChatMessage,
   ChatAttachment,
@@ -15,9 +15,11 @@ import type {
   SessionsPatchResult,
   PresenceEntry,
   EventLogEntry,
-} from '@/types';
-import * as SessionStorage from '@/lib/session-storage';
-import { stripThinkingTags } from '@/lib/utils-message';
+  BridgeSessionInfo,
+  BridgeSessionActionResult,
+} from "@/types";
+import * as SessionStorage from "@/lib/session-storage";
+import { stripThinkingTags } from "@/lib/utils-message";
 
 interface AppState {
   // Connection state
@@ -60,6 +62,12 @@ interface AppState {
   currentModel: string | null;
   currentContextTokens: number | null;
 
+  // Connection mode (webhook/bridge vs direct gateway) and bridge session state
+  useWebhookMode: boolean;
+  bridgeSessions: BridgeSessionInfo[];
+  bridgeSessionsLoading: boolean;
+  bridgeSessionsError: string | null;
+
   // Actions
   setConnected: (connected: boolean) => void;
   setGatewayUrl: (url: string) => void;
@@ -96,12 +104,27 @@ interface AppState {
   addEventLog: (entry: EventLogEntry) => void;
   setAssistantName: (name: string) => void;
   setAssistantAvatar: (avatar: string | null) => void;
-  setCurrentModelInfo: (provider: string | null, model: string | null, contextTokens: number | null) => void;
+  setCurrentModelInfo: (
+    provider: string | null,
+    model: string | null,
+    contextTokens: number | null,
+  ) => void;
+
+  setUseWebhookMode: (useWebhookMode: boolean) => void;
+
+  // Bridge session management (session control messages over Webhook)
+  loadBridgeSessions: () => Promise<void>;
+  getBridgeSession: (key: string) => Promise<BridgeSessionInfo | null>;
+  resetBridgeSession: (key: string) => Promise<BridgeSessionActionResult>;
+  deleteBridgeSession: (key: string) => Promise<BridgeSessionActionResult>;
 
   // Connection management
   connect: () => void;
   disconnect: () => void;
-  sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<string | null>;
+  sendMessage: (
+    content: string,
+    attachments?: ChatAttachment[],
+  ) => Promise<string | null>;
   abortRun: () => Promise<boolean>;
 
   // Session management
@@ -113,7 +136,7 @@ interface AppState {
       thinkingLevel?: string | null;
       verboseLevel?: string | null;
       reasoningLevel?: string | null;
-    }
+    },
   ) => Promise<void>;
   deleteSession: (key: string) => Promise<void>;
   resetSession: () => void;
@@ -134,21 +157,21 @@ export const useAppStore = create<AppState>()(
         // Initial state
         connected: false,
         connecting: false,
-        gatewayUrl: '',
-        token: '',
-        uid: '',
+        gatewayUrl: "",
+        token: "",
+        uid: "",
         client: null,
         hello: null,
         lastError: null,
 
-        sessionKey: 'main',
+        sessionKey: "main",
         messages: [],
         thinkingLevel: null,
         sending: false,
         stream: null,
         streamStartedAt: null,
         runId: null,
-        draft: '',
+        draft: "",
         attachments: [],
         queue: [],
         showThinking: true,
@@ -160,12 +183,17 @@ export const useAppStore = create<AppState>()(
 
         presenceEntries: [],
         eventLog: [],
-        assistantName: 'OpenClaw',
+        assistantName: "OpenClaw",
         assistantAvatar: null,
 
         currentModelProvider: null,
         currentModel: null,
         currentContextTokens: null,
+
+        useWebhookMode: false,
+        bridgeSessions: [],
+        bridgeSessionsLoading: false,
+        bridgeSessionsError: null,
 
         // Connection actions
         setConnected: (connected) => set({ connected }),
@@ -182,16 +210,17 @@ export const useAppStore = create<AppState>()(
         addMessage: (message) => {
           // Filter out system messages and empty content
           const role = message.role?.toLowerCase();
-          if (role === 'system') {
+          if (role === "system") {
             return; // Skip system messages
           }
           // Check if content is empty
           const content = message.content;
-          const hasContent = typeof content === 'string'
-            ? content.trim().length > 0
-            : Array.isArray(content)
-              ? content.some((c: any) => c.type === 'text' && c.text?.trim())
-              : false;
+          const hasContent =
+            typeof content === "string"
+              ? content.trim().length > 0
+              : Array.isArray(content)
+                ? content.some((c: any) => c.type === "text" && c.text?.trim())
+                : false;
           if (!hasContent) {
             return; // Skip messages with no text content
           }
@@ -222,7 +251,7 @@ export const useAppStore = create<AppState>()(
         processQueue: () => {
           const { queue, sending } = get();
           if (sending || queue.length === 0) return;
-          
+
           const nextItem = queue[0];
           get().removeFromQueue(nextItem.id);
           get().sendMessage(nextItem.text, nextItem.attachments);
@@ -238,15 +267,24 @@ export const useAppStore = create<AppState>()(
         // System actions
         setPresenceEntries: (entries) => set({ presenceEntries: entries }),
         addEventLog: (entry) =>
-          set((state) => ({ eventLog: [entry, ...state.eventLog].slice(0, 250) })),
+          set((state) => ({
+            eventLog: [entry, ...state.eventLog].slice(0, 250),
+          })),
         setAssistantName: (name) => set({ assistantName: name }),
         setAssistantAvatar: (avatar) => set({ assistantAvatar: avatar }),
         setCurrentModelInfo: (provider, model, contextTokens) =>
-          set({ currentModelProvider: provider, currentModel: model, currentContextTokens: contextTokens }),
+          set({
+            currentModelProvider: provider,
+            currentModel: model,
+            currentContextTokens: contextTokens,
+          }),
+
+        setUseWebhookMode: (useWebhookMode) => set({ useWebhookMode }),
 
         // Connection management
         connect: () => {
-          const { gatewayUrl, token, uid, client, connected, connecting } = get();
+          const { gatewayUrl, token, uid, client, connected, connecting } =
+            get();
           if (!gatewayUrl) return;
 
           // If already connected or connecting, don't reconnect
@@ -260,147 +298,178 @@ export const useAppStore = create<AppState>()(
 
           // Detect if connecting to Webhook (not Gateway)
           // Webhook URLs typically don't have port 18789 or localhost
-          const isWebhookMode = !gatewayUrl.includes(':18789') && !gatewayUrl.includes('localhost') && !gatewayUrl.includes('127.0.0.1');
+          const isWebhookMode =
+            !gatewayUrl.includes(":18789") &&
+            !gatewayUrl.includes("localhost") &&
+            !gatewayUrl.includes("127.0.0.1");
+          set({ useWebhookMode: isWebhookMode });
 
           // Import GatewayClient dynamically to avoid circular dependencies
-          import('@/lib/utils-gateway').then(({ GatewayClient }) => {
+          import("@/lib/utils-gateway").then(({ GatewayClient }) => {
             const newClient = new GatewayClient({
               url: gatewayUrl,
               token,
               uid,
-              mode: isWebhookMode ? 'bridge' : 'control-ui',
+              mode: isWebhookMode ? "bridge" : "control-ui",
               useWebhookMode: isWebhookMode,
               onHello: (hello) => {
-                set({ connecting: false, hello: hello, connected: true, lastError: null });
-                console.log('[Gateway] Connected:', hello);
+                set({
+                  connecting: false,
+                  hello: hello,
+                  connected: true,
+                  lastError: null,
+                });
+                console.log("[Gateway] Connected:", hello);
                 // Auto-load sessions after successful connection
                 get().loadSessions();
               },
               onEvent: (evt) => {
-                console.log('[Gateway] Event:', evt);
-                
+                console.log("[Gateway] Event:", evt);
+
                 // Handle chat events (from Gateway)
-                if (evt.event === 'chat') {
+                if (evt.event === "chat") {
                   const payload = evt.payload as any;
 
                   // Extract text from content array, strip thinking/meta tags
                   const extractText = (content: any): string => {
-                    if (!content) return '';
-                    if (typeof content === 'string') return stripThinkingTags(content);
+                    if (!content) return "";
+                    if (typeof content === "string")
+                      return stripThinkingTags(content);
                     if (Array.isArray(content)) {
                       const text = content
-                        .filter((c) => c.type === 'text')
-                        .map((c) => c.text || '')
-                        .join('');
+                        .filter((c) => c.type === "text")
+                        .map((c) => c.text || "")
+                        .join("");
                       return stripThinkingTags(text);
                     }
-                    return '';
+                    return "";
                   };
-                  
-                  if (payload.state === 'delta') {
+
+                  if (payload.state === "delta") {
                     // Streaming response
                     const text = extractText(payload.message?.content);
                     if (text) {
                       set((state) => ({
-                        stream: (state.stream || '') + text,
+                        stream: (state.stream || "") + text,
                       }));
                     }
-                  } else if (payload.state === 'final') {
-                    // Final response
+                  } else if (payload.state === "final") {
+                    // Final response - clear stream first to avoid duplicate display
+                    set({ stream: null, sending: false });
                     if (payload.message) {
                       const text = extractText(payload.message.content);
                       const message: ChatMessage = {
-                        role: payload.message.role || 'assistant',
+                        role: payload.message.role || "assistant",
                         content: text,
                         timestamp: payload.message.timestamp || Date.now(),
                       };
                       get().addMessage(message);
                     }
-                    set({ stream: null, sending: false });
                     // Process queue after response completes
                     setTimeout(() => get().processQueue(), 100);
-                  } else if (payload.state === 'error') {
+                  } else if (payload.state === "error") {
                     set({
                       stream: null,
                       sending: false,
-                      lastError: extractText(payload.message?.content) || 'An error occurred',
+                      lastError:
+                        extractText(payload.message?.content) ||
+                        "An error occurred",
                     });
                   }
                   return;
                 }
-                
+
                 // Handle agent events (legacy/bridge format)
-                if (evt.event === 'agent.delta') {
+                if (evt.event === "agent.delta") {
                   // Delta event - streaming response
                   const payload = evt.payload as any;
                   if (payload.content) {
                     set((state) => ({
-                      stream: (state.stream || '') + payload.content,
+                      stream: (state.stream || "") + payload.content,
                     }));
                   }
-                } else if (evt.event === 'agent.final') {
-                  // Final event - complete response
+                } else if (evt.event === "agent.final") {
+                  // Final event - clear stream first to avoid duplicate display
+                  set({ stream: null, sending: false });
                   const payload = evt.payload as any;
                   if (payload.message) {
                     get().addMessage(payload.message);
                   }
-                  set({ stream: null, sending: false });
                   // Process queue after response completes
                   setTimeout(() => get().processQueue(), 100);
-                } else if (evt.event === 'agent.abort') {
+                } else if (evt.event === "agent.abort") {
                   // Abort event
                   const payload = evt.payload as any;
                   set({
                     stream: null,
                     sending: false,
-                    lastError: payload.error || 'Run aborted',
+                    lastError: payload.error || "Run aborted",
                   });
-                } else if (evt.event === 'agent') {
+                } else if (evt.event === "agent") {
                   // Agent lifecycle events
                   const payload = evt.payload as any;
-                  if (payload.stream === 'lifecycle' && payload.data?.phase === 'error') {
+                  if (
+                    payload.stream === "lifecycle" &&
+                    payload.data?.phase === "error"
+                  ) {
                     // Error phase in lifecycle
-                    const errorMsg = payload.data.error || 'An error occurred';
-                    console.error('[Gateway] Agent error:', errorMsg);
+                    const errorMsg = payload.data.error || "An error occurred";
+                    console.error("[Gateway] Agent error:", errorMsg);
                     set({
                       stream: null,
                       sending: false,
                       lastError: errorMsg,
                     });
                   }
-                } else if (evt.event === 'gateway.response') {
+                } else if (evt.event === "gateway.response") {
                   // Gateway response events
                   const payload = evt.payload as any;
-                  console.log('[Gateway] Response:', payload);
+                  console.log("[Gateway] Response:", payload);
 
                   // Handle sessions.list response - update sessions and model info
                   // Check for sessions array in payload to identify this response
-                  if (payload.ok && payload.payload && Array.isArray(payload.payload.sessions)) {
+                  if (
+                    payload.ok &&
+                    payload.payload &&
+                    Array.isArray(payload.payload.sessions)
+                  ) {
                     const sessionsPayload = payload.payload;
                     set({ sessions: sessionsPayload as SessionsListResult });
                     // Extract model info from defaults
                     if (sessionsPayload.defaults) {
                       set({
-                        currentModelProvider: sessionsPayload.defaults.modelProvider || null,
+                        currentModelProvider:
+                          sessionsPayload.defaults.modelProvider || null,
                         currentModel: sessionsPayload.defaults.model || null,
-                        currentContextTokens: sessionsPayload.defaults.contextTokens || null,
+                        currentContextTokens:
+                          sessionsPayload.defaults.contextTokens || null,
                       });
                     }
                     // Also update current session's model info if exists
                     const currentSession = sessionsPayload.sessions.find(
-                      (s: GatewaySessionRow) => s.key === get().sessionKey
+                      (s: GatewaySessionRow) => s.key === get().sessionKey,
                     );
                     if (currentSession) {
                       set({
-                        currentModelProvider: currentSession.modelProvider || sessionsPayload.defaults?.modelProvider || null,
-                        currentModel: currentSession.model || sessionsPayload.defaults?.model || null,
+                        currentModelProvider:
+                          currentSession.modelProvider ||
+                          sessionsPayload.defaults?.modelProvider ||
+                          null,
+                        currentModel:
+                          currentSession.model ||
+                          sessionsPayload.defaults?.model ||
+                          null,
                       });
                     }
                     return; // Don't add to stream
                   }
 
                   // Handle agent response - extract text from payloads and skip meta
-                  if (payload.ok && payload.payload && typeof payload.payload === 'object') {
+                  if (
+                    payload.ok &&
+                    payload.payload &&
+                    typeof payload.payload === "object"
+                  ) {
                     const pl = payload.payload as any;
                     // Check if this is an agent response (has runId, status, result)
                     if (pl.runId && pl.result && pl.result.payloads) {
@@ -408,10 +477,10 @@ export const useAppStore = create<AppState>()(
                       const texts = pl.result.payloads
                         .filter((p: any) => p.text)
                         .map((p: any) => p.text)
-                        .join('\n');
+                        .join("\n");
                       if (texts) {
                         set((state) => ({
-                          stream: (state.stream || '') + texts,
+                          stream: (state.stream || "") + texts,
                         }));
                       }
                       // Update model info from agentMeta if available
@@ -428,18 +497,27 @@ export const useAppStore = create<AppState>()(
 
                   // For other tool call responses, add to stream if there's content
                   if (payload.ok && payload.payload) {
-                    const payloadStr = typeof payload.payload === 'string'
-                      ? payload.payload
-                      : JSON.stringify(payload.payload, null, 2);
+                    const payloadStr =
+                      typeof payload.payload === "string"
+                        ? payload.payload
+                        : JSON.stringify(payload.payload, null, 2);
                     set((state) => ({
-                      stream: (state.stream || '') + '\n[Response: ' + payloadStr + ']',
+                      stream:
+                        (state.stream || "") +
+                        "\n[Response: " +
+                        payloadStr +
+                        "]",
                     }));
                   } else if (!payload.ok && payload.error) {
                     set((state) => ({
-                      stream: (state.stream || '') + '\n[Error: ' + payload.error.message + ']',
+                      stream:
+                        (state.stream || "") +
+                        "\n[Error: " +
+                        payload.error.message +
+                        "]",
                     }));
                   }
-                } else if (evt.event === 'presence' || evt.event === 'health') {
+                } else if (evt.event === "presence" || evt.event === "health") {
                   // Presence/health events
                   // Update state version tracking
                   if (evt.stateVersion) {
@@ -449,7 +527,7 @@ export const useAppStore = create<AppState>()(
               },
               onClose: (info) => {
                 set({ connecting: false, connected: false, hello: null });
-                console.log('[Gateway] Closed:', info);
+                console.log("[Gateway] Closed:", info);
               },
             });
 
@@ -461,13 +539,22 @@ export const useAppStore = create<AppState>()(
         disconnect: () => {
           const { client } = get();
           client?.stop();
-          set({ client: null, connected: false, connecting: false, hello: null });
+          set({
+            client: null,
+            connected: false,
+            connecting: false,
+            hello: null,
+            useWebhookMode: false,
+            bridgeSessions: [],
+            bridgeSessionsLoading: false,
+            bridgeSessionsError: null,
+          });
         },
 
         sendMessage: async (content, attachments?) => {
           const { client, sessionKey, uid, sending } = get();
           if (!client || !client.connected) {
-            set({ lastError: 'Not connected to gateway' });
+            set({ lastError: "Not connected to gateway" });
             return null;
           }
 
@@ -491,7 +578,7 @@ export const useAppStore = create<AppState>()(
           try {
             // Add user message to local state
             const userMessage: ChatMessage = {
-              role: 'user',
+              role: "user",
               content: trimmed,
               timestamp: Date.now(),
             };
@@ -503,24 +590,30 @@ export const useAppStore = create<AppState>()(
             const msg: WebhookMessage = {
               id: runId,
               content: trimmed,
-              sender_id: uid || 'webchat-user',
-              session: sessionKey || 'main',
-              peerKind: 'dm',
-              peerId: uid || 'webchat-user',
-              chatType: 'dm',
-              chatId: uid || 'webchat-user',
-              senderId: uid || 'webchat-user',
+              sender_id: uid || "webchat-user",
+              session: sessionKey || "main",
+              peerKind: "dm",
+              peerId: uid || "webchat-user",
+              chatType: "dm",
+              chatId: uid || "webchat-user",
+              senderId: uid || "webchat-user",
             };
 
             // Cast to any to access sendWebhookMessage method
             (client as any).sendWebhookMessage(msg);
 
-            set({ runId, stream: '', streamStartedAt: Date.now() });
+            set({ runId, stream: "", streamStartedAt: Date.now() });
 
             return runId;
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
-            set({ lastError: errorMessage, sending: false, runId: null, stream: null });
+            const errorMessage =
+              error instanceof Error ? error.message : "Failed to send message";
+            set({
+              lastError: errorMessage,
+              sending: false,
+              runId: null,
+              stream: null,
+            });
             return null;
           }
         },
@@ -531,10 +624,16 @@ export const useAppStore = create<AppState>()(
 
           try {
             // Abort via gateway (will be implemented)
-            set({ runId: null, stream: null, streamStartedAt: null, sending: false });
+            set({
+              runId: null,
+              stream: null,
+              streamStartedAt: null,
+              sending: false,
+            });
             return true;
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to abort';
+            const errorMessage =
+              error instanceof Error ? error.message : "Failed to abort";
             set({ lastError: errorMessage });
             return false;
           }
@@ -544,34 +643,40 @@ export const useAppStore = create<AppState>()(
         loadSessions: async () => {
           const { client, connected, sessionsLoading } = get();
           if (!client || !connected) {
-            console.log('[Store] Cannot load sessions: not connected');
+            console.log("[Store] Cannot load sessions: not connected");
             return;
           }
           if (sessionsLoading) {
-            console.log('[Store] Sessions already loading');
+            console.log("[Store] Sessions already loading");
             return;
           }
 
           set({ sessionsLoading: true, sessionsError: null });
 
-          console.log('[Store] Sending sessions.list request...');
+          console.log("[Store] Sending sessions.list request...");
           try {
-            const res = await client.request<SessionsListResult | undefined>('sessions.list', {
-              activeMinutes: 1440, // Last 24 hours (1440 minutes)
-              limit: 100,
-              includeGlobal: true,
-              includeUnknown: true,
-            });
-            console.log('[Store] sessions.list response:', res);
+            const res = await client.request<SessionsListResult | undefined>(
+              "sessions.list",
+              {
+                activeMinutes: 1440, // Last 24 hours (1440 minutes)
+                limit: 100,
+                includeGlobal: true,
+                includeUnknown: true,
+              },
+            );
+            console.log("[Store] sessions.list response:", res);
             if (res) {
               set({ sessions: res, sessionsLoading: false });
-              console.log('[Store] Loaded sessions:', res.count, 'sessions');
+              console.log("[Store] Loaded sessions:", res.count, "sessions");
             } else {
               set({ sessionsLoading: false });
             }
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to load sessions';
-            console.error('[Store] Failed to load sessions:', errorMessage);
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "Failed to load sessions";
+            console.error("[Store] Failed to load sessions:", errorMessage);
             set({ sessionsError: errorMessage, sessionsLoading: false });
           }
         },
@@ -579,24 +684,30 @@ export const useAppStore = create<AppState>()(
         patchSession: async (key, patch) => {
           const { client, connected } = get();
           if (!client || !connected) {
-            console.log('[Store] Cannot patch session: not connected');
+            console.log("[Store] Cannot patch session: not connected");
             return;
           }
 
           try {
             const params: Record<string, unknown> = { key };
-            if ('label' in patch) params.label = patch.label;
-            if ('thinkingLevel' in patch) params.thinkingLevel = patch.thinkingLevel;
-            if ('verboseLevel' in patch) params.verboseLevel = patch.verboseLevel;
-            if ('reasoningLevel' in patch) params.reasoningLevel = patch.reasoningLevel;
+            if ("label" in patch) params.label = patch.label;
+            if ("thinkingLevel" in patch)
+              params.thinkingLevel = patch.thinkingLevel;
+            if ("verboseLevel" in patch)
+              params.verboseLevel = patch.verboseLevel;
+            if ("reasoningLevel" in patch)
+              params.reasoningLevel = patch.reasoningLevel;
 
-            await client.request<SessionsPatchResult>('sessions.patch', params);
+            await client.request<SessionsPatchResult>("sessions.patch", params);
             // Reload sessions after patch
             await get().loadSessions();
-            console.log('[Store] Patched session:', key);
+            console.log("[Store] Patched session:", key);
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to patch session';
-            console.error('[Store] Failed to patch session:', errorMessage);
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "Failed to patch session";
+            console.error("[Store] Failed to patch session:", errorMessage);
             set({ sessionsError: errorMessage });
           }
         },
@@ -604,19 +715,25 @@ export const useAppStore = create<AppState>()(
         deleteSession: async (key) => {
           const { client, connected, sessionsLoading } = get();
           if (!client || !connected) {
-            console.log('[Store] Cannot delete session: not connected');
+            console.log("[Store] Cannot delete session: not connected");
             return;
           }
           if (sessionsLoading) return;
 
           try {
-            await client.request('sessions.delete', { key, deleteTranscript: true });
+            await client.request("sessions.delete", {
+              key,
+              deleteTranscript: true,
+            });
             // Reload sessions after delete
             await get().loadSessions();
-            console.log('[Store] Deleted session:', key);
+            console.log("[Store] Deleted session:", key);
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to delete session';
-            console.error('[Store] Failed to delete session:', errorMessage);
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "Failed to delete session";
+            console.error("[Store] Failed to delete session:", errorMessage);
             set({ sessionsError: errorMessage });
           }
         },
@@ -628,7 +745,7 @@ export const useAppStore = create<AppState>()(
             stream: null,
             streamStartedAt: null,
             runId: null,
-            draft: '',
+            draft: "",
             attachments: [],
             queue: [],
             sending: false,
@@ -638,9 +755,9 @@ export const useAppStore = create<AppState>()(
         createNewSession: () => {
           // Create new session via storage utility
           const metadata = SessionStorage.createNewSession();
-          
-          console.log('[Store] Creating new session:', metadata.key);
-          
+
+          console.log("[Store] Creating new session:", metadata.key);
+
           set({
             sessionKey: metadata.key,
             messages: [],
@@ -648,7 +765,7 @@ export const useAppStore = create<AppState>()(
             stream: null,
             streamStartedAt: null,
             runId: null,
-            draft: '',
+            draft: "",
             attachments: [],
             queue: [],
             sending: false,
@@ -656,11 +773,11 @@ export const useAppStore = create<AppState>()(
         },
 
         switchSession: (key) => {
-          console.log('[Store] Switching to session:', key);
-          
+          console.log("[Store] Switching to session:", key);
+
           // Load session data from localStorage
           const sessionData = SessionStorage.getSessionData(key);
-          
+
           if (sessionData) {
             set({
               sessionKey: key,
@@ -669,7 +786,7 @@ export const useAppStore = create<AppState>()(
               stream: null,
               streamStartedAt: null,
               runId: null,
-              draft: '',
+              draft: "",
               attachments: [],
               queue: [],
               sending: false,
@@ -683,7 +800,7 @@ export const useAppStore = create<AppState>()(
               stream: null,
               streamStartedAt: null,
               runId: null,
-              draft: '',
+              draft: "",
               attachments: [],
               queue: [],
               sending: false,
@@ -697,7 +814,7 @@ export const useAppStore = create<AppState>()(
 
         saveCurrentSession: () => {
           const { sessionKey, messages } = get();
-          
+
           const sessionData: SessionStorage.SessionData = {
             metadata: {
               key: sessionKey,
@@ -708,36 +825,40 @@ export const useAppStore = create<AppState>()(
             },
             messages,
           };
-          
+
           // Merge with existing metadata if available
           const existing = SessionStorage.getSessionData(sessionKey);
           if (existing) {
             sessionData.metadata.label = existing.metadata.label;
             sessionData.metadata.createdAt = existing.metadata.createdAt;
           }
-          
+
           SessionStorage.saveSessionData(sessionKey, sessionData);
         },
 
         // Chat management
         loadChatHistory: async () => {
           const { sessionKey } = get();
-          
+
           set({ sessionsLoading: true });
           try {
             // Load from localStorage
             const sessionData = SessionStorage.getSessionData(sessionKey);
             if (sessionData) {
-              set({ 
+              set({
                 messages: sessionData.messages,
-                sessionsLoading: false 
+                sessionsLoading: false,
               });
-              console.log('[Store] Loaded chat history:', sessionData.messages.length, 'messages');
+              console.log(
+                "[Store] Loaded chat history:",
+                sessionData.messages.length,
+                "messages",
+              );
             } else {
               set({ sessionsLoading: false });
             }
           } catch (error) {
-            console.error('[Store] Failed to load chat history:', error);
+            console.error("[Store] Failed to load chat history:", error);
             set({ sessionsLoading: false });
           }
         },
@@ -751,9 +872,125 @@ export const useAppStore = create<AppState>()(
             runId: null,
           });
         },
+
+        // Bridge session management (Webhook session control messages)
+        loadBridgeSessions: async () => {
+          const { client, connected, useWebhookMode } = get();
+          if (!client || !connected || !useWebhookMode) {
+            console.log("[Store] Cannot load bridge sessions: not connected or gateway mode");
+            return;
+          }
+          if (get().bridgeSessionsLoading) return;
+          set({ bridgeSessionsLoading: true, bridgeSessionsError: null });
+          try {
+            const { data } = await client.sendSessionControl<{
+              sessions: BridgeSessionInfo[];
+              count: number;
+            }>({ type: "session.list" });
+            const sessions = Array.isArray(data?.sessions) ? data.sessions : [];
+            set({ bridgeSessions: sessions, bridgeSessionsLoading: false });
+          } catch (error) {
+            const msg =
+              error instanceof Error
+                ? error.message
+                : "Failed to load bridge sessions";
+            console.error("[Store] Failed to load bridge sessions:", msg);
+            set({ bridgeSessionsError: msg, bridgeSessionsLoading: false });
+          }
+        },
+
+        getBridgeSession: async (key) => {
+          const { client, connected, useWebhookMode } = get();
+          if (!client || !connected || !useWebhookMode) {
+            throw new Error("not connected in webhook mode");
+          }
+          try {
+            const { data } = await client.sendSessionControl<
+              | (BridgeSessionInfo & { key: string })
+              | { success: false; key: string; error?: string }
+            >({ type: "session.get", key });
+            if (
+              data &&
+              typeof data === "object" &&
+              "success" in data &&
+              data.success === false
+            ) {
+              return null;
+            }
+            return data as BridgeSessionInfo;
+          } catch (error) {
+            const msg =
+              error instanceof Error ? error.message : "session.get failed";
+            set({ bridgeSessionsError: msg });
+            throw error;
+          }
+        },
+
+        resetBridgeSession: async (key) => {
+          const { client, connected, useWebhookMode } = get();
+          if (!client || !connected || !useWebhookMode) {
+            const result: BridgeSessionActionResult = {
+              success: false,
+              key,
+              error: "not connected in webhook mode",
+            };
+            return result;
+          }
+          try {
+            const { data } = await client.sendSessionControl<BridgeSessionActionResult>({
+              type: "session.reset",
+              key,
+            });
+            const result: BridgeSessionActionResult = {
+              success: data?.success === true,
+              key: data?.key ?? key,
+              error: data?.error,
+            };
+            // Refresh list in background
+            void get().loadBridgeSessions();
+            return result;
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : "session.reset failed";
+            set({ bridgeSessionsError: msg });
+            return { success: false, key, error: msg };
+          }
+        },
+
+        deleteBridgeSession: async (key) => {
+          const { client, connected, useWebhookMode } = get();
+          if (!client || !connected || !useWebhookMode) {
+            const result: BridgeSessionActionResult = {
+              success: false,
+              key,
+              error: "not connected in webhook mode",
+            };
+            return result;
+          }
+          try {
+            const { data } = await client.sendSessionControl<BridgeSessionActionResult>({
+              type: "session.delete",
+              key,
+            });
+            const result: BridgeSessionActionResult = {
+              success: data?.success === true,
+              key: data?.key ?? key,
+              error: data?.error,
+            };
+            // Optimistically drop from list and refresh
+            set((state) => ({
+              bridgeSessions: state.bridgeSessions.filter((s) => s.key !== key),
+            }));
+            void get().loadBridgeSessions();
+            return result;
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : "session.delete failed";
+            set({ bridgeSessionsError: msg });
+            return { success: false, key, error: msg };
+          }
+        },
       }),
       {
-        name: 'openclaw-app-storage',
+        name: "openclaw-app-storage",
         partialize: (state) => ({
           gatewayUrl: state.gatewayUrl,
           token: state.token,
@@ -763,7 +1000,7 @@ export const useAppStore = create<AppState>()(
           focusMode: state.focusMode,
           assistantName: state.assistantName,
         }),
-      }
-    )
-  )
+      },
+    ),
+  ),
 );

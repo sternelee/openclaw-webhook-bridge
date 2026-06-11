@@ -66,6 +66,8 @@ export interface GatewayClientOptions {
   onEvent?: (evt: GatewayEventFrame) => void;
   onClose?: (info: { code: number; reason: string }) => void;
   onGap?: (info: { expected: number; received: number }) => void;
+  /** Receive session control responses (`{type, data}`) from the bridge */
+  onSessionControl?: (resp: SessionControlResponse) => void;
 }
 
 /** Agent event payload */
@@ -173,4 +175,49 @@ export interface EventLogEntry {
   ts: number;
   event: string;
   payload?: unknown;
+}
+
+/** Bridge session control request type (kebab-case over the wire) */
+export type SessionControlType =
+  | "session.get"
+  | "session.list"
+  | "session.reset"
+  | "session.delete";
+
+/** Bridge session control request frame (raw JSON over WS) */
+export interface SessionControlRequest {
+  type: SessionControlType;
+  key?: string;
+  id?: string;
+}
+
+/** Delivery context for a bridge session entry */
+export interface BridgeDeliveryContext {
+  channel?: string;
+  to?: string;
+  accountId?: string;
+  threadId?: string;
+}
+
+/** Single bridge session entry (matches SESSION_CONTROL.md spec) */
+export interface BridgeSessionInfo {
+  key: string;
+  sessionId: string;
+  updatedAt: number;
+  deliveryContext?: BridgeDeliveryContext;
+  lastChannel?: string;
+  lastTo?: string;
+}
+
+/** Success payload for reset/delete actions */
+export interface BridgeSessionActionResult {
+  success: boolean;
+  key: string;
+  error?: string;
+}
+
+/** Generic bridge session control response (envelope = {type, data}) */
+export interface SessionControlResponse {
+  type: SessionControlType;
+  data: unknown;
 }
