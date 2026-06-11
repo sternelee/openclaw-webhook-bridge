@@ -45,13 +45,14 @@ export function extractMessageText(message: ChatMessage): string {
 export function messageToMarkdown(message: ChatMessage): string {
   const { role, content, timestamp } = message;
 
-  const roleLabel = {
-    user: "**You**",
-    assistant: "**Assistant**",
-    system: "**System**",
-    tool: "**Tool**",
-    tool_result: "**Tool Result**",
-  }[role] || `**${role}**`;
+  const roleLabel =
+    {
+      user: "**You**",
+      assistant: "**Assistant**",
+      system: "**System**",
+      tool: "**Tool**",
+      tool_result: "**Tool Result**",
+    }[role] || `**${role}**`;
 
   const date = timestamp ? new Date(timestamp).toLocaleString() : "";
   const text = extractMessageText(message);

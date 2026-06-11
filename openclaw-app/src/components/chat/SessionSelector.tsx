@@ -103,8 +103,12 @@ export function SessionSelector({
                       <div className="h-4 w-4 flex-shrink-0" />
                     )}
                     <div className="flex flex-col flex-1 min-w-0">
-                      <span className="text-sm font-medium truncate">{displayLabel}</span>
-                      <span className="text-xs text-muted-foreground">{messageText}</span>
+                      <span className="text-sm font-medium truncate">
+                        {displayLabel}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {messageText}
+                      </span>
                     </div>
                   </div>
                 </DropdownMenuItem>

@@ -3,9 +3,9 @@
  * User can remove items from the queue.
  */
 
-import type { ChatQueueItem } from '@/types';
-import { Icons } from '@/components/ui/icons';
-import { Button } from '@/components/ui/button';
+import type { ChatQueueItem } from "@/types";
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
 
 interface QueueDisplayProps {
   queue: ChatQueueItem[];
@@ -18,7 +18,11 @@ export function QueueDisplay({ queue, onRemove }: QueueDisplayProps) {
   }
 
   return (
-    <div className="border-t border-border/50 bg-muted/20 px-4 py-2" role="status" aria-live="polite">
+    <div
+      className="border-t border-border/50 bg-muted/20 px-4 py-2"
+      role="status"
+      aria-live="polite"
+    >
       <div className="flex items-center gap-2 mb-2">
         <Icons.clock className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium text-muted-foreground">
@@ -33,7 +37,10 @@ export function QueueDisplay({ queue, onRemove }: QueueDisplayProps) {
           >
             <div className="flex-1 min-w-0">
               <p className="text-sm text-foreground/90 line-clamp-2">
-                {item.text || (item.attachments?.length ? `Image (${item.attachments.length})` : '')}
+                {item.text ||
+                  (item.attachments?.length
+                    ? `Image (${item.attachments.length})`
+                    : "")}
               </p>
             </div>
             <Button

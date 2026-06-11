@@ -11,7 +11,15 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { stripMarkdown } from "@/lib/utils-markdown";
 import { copyToClipboard } from "@/lib/utils-chat";
-import { messageToMarkdown, extractText, extractThinking, formatReasoningMarkdown, extractImages, getRoleDisplayInfo, normalizeRoleForGrouping } from "@/lib/utils-message";
+import {
+  messageToMarkdown,
+  extractText,
+  extractThinking,
+  formatReasoningMarkdown,
+  extractImages,
+  getRoleDisplayInfo,
+  normalizeRoleForGrouping,
+} from "@/lib/utils-message";
 import { Icons } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { ToolCardComponent } from "./ToolCard";
@@ -25,7 +33,12 @@ interface MessageBubbleProps {
   showHeader?: boolean; // Whether to show role header and avatar
 }
 
-export function MessageBubble({ message, isStreaming = false, onViewToolDetail, showHeader = false }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  isStreaming = false,
+  onViewToolDetail,
+  showHeader = false,
+}: MessageBubbleProps) {
   const { role, content, timestamp } = message;
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -42,10 +55,33 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
 
   // Get role display info
   const getRoleInfo = () => {
-    if (isUser) return { label: "You", icon: null, bgColor: "bg-accent/10", textColor: "text-foreground" };
-    if (isSystem) return { label: "System", icon: Icons.circle, bgColor: "bg-muted/50", textColor: "text-muted-foreground" };
-    if (isTool) return { label: "Tool", icon: Icons.wrench, bgColor: "bg-muted/50", textColor: "text-muted-foreground" };
-    return { label: "Assistant", icon: Icons.brain, bgColor: "bg-card", textColor: "text-foreground" };
+    if (isUser)
+      return {
+        label: "You",
+        icon: null,
+        bgColor: "bg-accent/10",
+        textColor: "text-foreground",
+      };
+    if (isSystem)
+      return {
+        label: "System",
+        icon: Icons.circle,
+        bgColor: "bg-muted/50",
+        textColor: "text-muted-foreground",
+      };
+    if (isTool)
+      return {
+        label: "Tool",
+        icon: Icons.wrench,
+        bgColor: "bg-muted/50",
+        textColor: "text-muted-foreground",
+      };
+    return {
+      label: "Assistant",
+      icon: Icons.brain,
+      bgColor: "bg-card",
+      textColor: "text-foreground",
+    };
   };
 
   const roleInfo = getRoleInfo();
@@ -66,7 +102,12 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
 
   // Get tool cards from message
   const getToolCards = () => {
-    const toolCards: Array<{ kind: "call" | "result"; name: string; args?: unknown; text?: string }> = [];
+    const toolCards: Array<{
+      kind: "call" | "result";
+      name: string;
+      args?: unknown;
+      text?: string;
+    }> = [];
 
     for (const item of contentItems) {
       if (item.type === "tool_call") {
@@ -95,7 +136,9 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
   // Don't render empty messages
   if (!hasContent && !hasThinking && !hasImages) return null;
 
-  const timeString = formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+  const timeString = formatDistanceToNow(new Date(timestamp), {
+    addSuffix: true,
+  });
 
   const handleCopy = async () => {
     const markdown = messageToMarkdown(message);
@@ -111,27 +154,43 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
   };
 
   return (
-    <div className={`${showHeader ? 'flex gap-3' : ''} ${isUser && showHeader ? "flex-row-reverse" : ""} ${showHeader ? 'group' : ''}`}>
+    <div
+      className={`${showHeader ? "flex gap-3" : ""} ${isUser && showHeader ? "flex-row-reverse" : ""} ${showHeader ? "group" : ""}`}
+    >
       {/* Avatar - only show when showHeader is true */}
       {showHeader && !isUser && roleInfo.icon && (
-        <div className={`flex-shrink-0 w-8 h-8 rounded-full ${roleInfo.bgColor} flex items-center justify-center`}>
+        <div
+          className={`flex-shrink-0 w-8 h-8 rounded-full ${roleInfo.bgColor} flex items-center justify-center`}
+        >
           <roleInfo.icon className="h-4 w-4 text-muted-foreground" />
         </div>
       )}
 
       {/* Message content */}
-      <div className={`flex flex-col gap-1 ${showHeader ? 'max-w-[80%]' : 'w-full'} ${isUser ? "items-end" : "items-start"}`}>
+      <div
+        className={`flex flex-col gap-1 ${showHeader ? "max-w-[80%]" : "w-full"} ${isUser ? "items-end" : "items-start"}`}
+      >
         {/* Role label with copy button - only show when showHeader is true */}
         {showHeader && !isUser && (
           <div className="flex items-center gap-2 px-1">
-            <span className="text-xs font-medium text-muted-foreground">{roleInfo.label}</span>
-            <span className="text-xs text-muted-foreground/50">{timeString}</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {roleInfo.label}
+            </span>
+            <span className="text-xs text-muted-foreground/50">
+              {timeString}
+            </span>
             <Button
               variant="ghost"
               size="sm"
               className="h-5 px-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
               onClick={handleCopy}
-              title={copied ? "Copied!" : copyError ? "Copy failed" : "Copy as markdown"}
+              title={
+                copied
+                  ? "Copied!"
+                  : copyError
+                    ? "Copy failed"
+                    : "Copy as markdown"
+              }
             >
               {copied ? (
                 <Icons.check className="h-3 w-3 text-ok" />
@@ -154,7 +213,9 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
             >
               <Icons.brain className="h-4 w-4" />
               <span>Thinking</span>
-              <span className="transform transition-transform">{showThinking ? "▼" : "▶"}</span>
+              <span className="transform transition-transform">
+                {showThinking ? "▼" : "▶"}
+              </span>
             </button>
             {showThinking && (
               <div className="prose prose-invert prose-sm max-w-none dark:prose-invert">
@@ -191,14 +252,22 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
             }`}
           >
             {isUser ? (
-              <p className="text-sm whitespace-pre-wrap break-words">{textContent}</p>
+              <p className="text-sm whitespace-pre-wrap break-words">
+                {textContent}
+              </p>
             ) : (
               <div className="prose prose-invert prose-sm max-w-none dark:prose-invert">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeRaw]}
                   components={{
-                    code: ({ node, inline, className, children, ...props }: any) => {
+                    code: ({
+                      node,
+                      inline,
+                      className,
+                      children,
+                      ...props
+                    }: any) => {
                       const match = /language-(\w+)/.exec(className || "");
                       const language = match ? match[1] : "text";
                       const codeString = String(children).replace(/\n$/, "");
@@ -216,16 +285,20 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
                           }}
                           codeTagProps={{
                             style: {
-                              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                            }
+                              fontFamily:
+                                "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                            },
                           }}
-                          showLineNumbers={codeString.split('\n').length > 5}
+                          showLineNumbers={codeString.split("\n").length > 5}
                           {...props}
                         >
                           {codeString}
                         </SyntaxHighlighter>
                       ) : (
-                        <code className="px-1 py-0.5 rounded bg-muted text-muted-foreground text-xs font-mono" {...props}>
+                        <code
+                          className="px-1 py-0.5 rounded bg-muted text-muted-foreground text-xs font-mono"
+                          {...props}
+                        >
                           {children}
                         </code>
                       );
@@ -259,7 +332,9 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
 
         {/* User timestamp */}
         {isUser && (
-          <span className="text-xs text-muted-foreground/50 px-1">{timeString}</span>
+          <span className="text-xs text-muted-foreground/50 px-1">
+            {timeString}
+          </span>
         )}
       </div>
     </div>
@@ -269,13 +344,19 @@ export function MessageBubble({ message, isStreaming = false, onViewToolDetail, 
 /**
  * Get a plain text preview of a message (e.g., for message lists)
  */
-export function getMessagePreview(message: ChatMessage, maxLength = 100): string {
+export function getMessagePreview(
+  message: ChatMessage,
+  maxLength = 100,
+): string {
   const { content, role } = message;
 
   if (role === "user") {
     if (typeof content === "string") return content.slice(0, maxLength);
     const textItems = Array.isArray(content)
-      ? content.filter((item: any) => item.type === "text").map((item: any) => item.text).join(" ")
+      ? content
+          .filter((item: any) => item.type === "text")
+          .map((item: any) => item.text)
+          .join(" ")
       : "";
     return textItems.slice(0, maxLength);
   }
@@ -285,7 +366,10 @@ export function getMessagePreview(message: ChatMessage, maxLength = 100): string
   }
 
   const textItems = Array.isArray(content)
-    ? content.filter((item: any) => item.type === "text").map((item: any) => item.text).join(" ")
+    ? content
+        .filter((item: any) => item.type === "text")
+        .map((item: any) => item.text)
+        .join(" ")
     : "";
 
   return stripMarkdown(textItems).slice(0, maxLength);

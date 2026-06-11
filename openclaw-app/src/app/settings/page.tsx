@@ -156,9 +156,16 @@ export default function ConfigPage() {
                   <Icons.check className="h-4 w-4 mr-2" />
                   Save
                 </Button>
-                <Button onClick={handleConnect} disabled={!localUrl || connecting}>
+                <Button
+                  onClick={handleConnect}
+                  disabled={!localUrl || connecting}
+                >
                   <Icons.wifi className="h-4 w-4 mr-2" />
-                  {connecting ? "Connecting..." : connected ? "Reconnect" : "Connect"}
+                  {connecting
+                    ? "Connecting..."
+                    : connected
+                      ? "Reconnect"
+                      : "Connect"}
                 </Button>
                 {connected && (
                   <Button onClick={() => router.push("/chat")}>
@@ -196,3 +203,4 @@ export default function ConfigPage() {
     </div>
   );
 }
+

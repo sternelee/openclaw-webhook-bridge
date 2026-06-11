@@ -38,7 +38,9 @@ export function extractText(message: unknown): string | null {
 
   if (Array.isArray(msg.content)) {
     const textItems = msg.content
-      .filter((item) => item && typeof item === "object" && item.type === "text")
+      .filter(
+        (item) => item && typeof item === "object" && item.type === "text",
+      )
       .map((item) => (item as { text?: string }).text || "")
       .join("\n");
     return textItems || null;

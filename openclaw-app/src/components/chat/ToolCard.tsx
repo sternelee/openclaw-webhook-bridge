@@ -38,21 +38,49 @@ export function ToolCardComponent({ card, onViewDetail }: ToolCardProps) {
   const getDisplayInfo = () => {
     const name = card.name.toLowerCase();
     if (name.includes("edit") || name.includes("write")) {
-      return { label: card.name, icon: "edit" as const, color: "bg-blue-500/20 text-blue-400" };
+      return {
+        label: card.name,
+        icon: "edit" as const,
+        color: "bg-blue-500/20 text-blue-400",
+      };
     }
     if (name.includes("search") || name.includes("find")) {
-      return { label: card.name, icon: "search" as const, color: "bg-purple-500/20 text-purple-400" };
+      return {
+        label: card.name,
+        icon: "search" as const,
+        color: "bg-purple-500/20 text-purple-400",
+      };
     }
     if (name.includes("read") || name.includes("view")) {
-      return { label: card.name, icon: "fileCode" as const, color: "bg-green-500/20 text-green-400" };
+      return {
+        label: card.name,
+        icon: "fileCode" as const,
+        color: "bg-green-500/20 text-green-400",
+      };
     }
-    if (name.includes("terminal") || name.includes("command") || name.includes("exec")) {
-      return { label: card.name, icon: "terminal" as const, color: "bg-orange-500/20 text-orange-400" };
+    if (
+      name.includes("terminal") ||
+      name.includes("command") ||
+      name.includes("exec")
+    ) {
+      return {
+        label: card.name,
+        icon: "terminal" as const,
+        color: "bg-orange-500/20 text-orange-400",
+      };
     }
     if (name.includes("browse") || name.includes("http")) {
-      return { label: card.name, icon: "globe" as const, color: "bg-cyan-500/20 text-cyan-400" };
+      return {
+        label: card.name,
+        icon: "globe" as const,
+        color: "bg-cyan-500/20 text-cyan-400",
+      };
     }
-    return { label: card.name, icon: "wrench" as const, color: "bg-gray-500/20 text-gray-400" };
+    return {
+      label: card.name,
+      icon: "wrench" as const,
+      color: "bg-gray-500/20 text-gray-400",
+    };
   };
 
   const display = getDisplayInfo();

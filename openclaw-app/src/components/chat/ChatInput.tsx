@@ -24,7 +24,8 @@ export function ChatInput({
   sending = false,
   placeholder = "Message (Enter to send, Shift+Enter for line breaks)",
 }: ChatInputProps) {
-  const { draft, setDraft, attachments, addAttachment, removeAttachment } = useAppStore();
+  const { draft, setDraft, attachments, addAttachment, removeAttachment } =
+    useAppStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isComposing, setIsComposing] = useState(false);
 
@@ -95,7 +96,8 @@ export function ChatInput({
     }
   };
 
-  const canSend = !disabled && (draft.trim().length > 0 || attachments.length > 0);
+  const canSend =
+    !disabled && (draft.trim().length > 0 || attachments.length > 0);
   const canAbort = sending && !!onAbort;
 
   return (
@@ -108,7 +110,11 @@ export function ChatInput({
               key={att.id}
               className="relative group rounded-lg overflow-hidden border border-border/50 bg-card"
             >
-              <img src={att.dataUrl} alt={att.fileName} className="h-16 w-auto object-cover" />
+              <img
+                src={att.dataUrl}
+                alt={att.fileName}
+                className="h-16 w-auto object-cover"
+              />
               <button
                 type="button"
                 onClick={() => removeAttachment(att.id)}
@@ -133,21 +139,31 @@ export function ChatInput({
             onPaste={handlePaste}
             onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={() => setIsComposing(false)}
-            placeholder={disabled ? "Connect to the gateway to start chatting…" : placeholder}
+            placeholder={
+              disabled
+                ? "Connect to the gateway to start chatting…"
+                : placeholder
+            }
             disabled={disabled}
             className="min-h-[44px] max-h-[200px] resize-none pr-12"
             rows={1}
           />
           {/* Attachment hint */}
           <div className="absolute bottom-2 right-2 text-xs text-muted-foreground/50 pointer-events-none">
-            {attachments.length > 0 && `${attachments.length} image${attachments.length > 1 ? "s" : ""}`}
+            {attachments.length > 0 &&
+              `${attachments.length} image${attachments.length > 1 ? "s" : ""}`}
           </div>
         </div>
 
         {/* Action buttons */}
         <div className="flex items-center gap-2">
           {canAbort ? (
-            <Button type="button" variant="destructive" onClick={onAbort} className="h-[44px]">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onAbort}
+              className="h-[44px]"
+            >
               <Icons.circle className="h-4 w-4 mr-2" />
               Stop
             </Button>

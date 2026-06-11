@@ -13,7 +13,11 @@ interface StreamingMessageProps {
   onViewDetail?: (content: string) => void;
 }
 
-export function StreamingMessage({ text, startedAt, onViewDetail }: StreamingMessageProps) {
+export function StreamingMessage({
+  text,
+  startedAt,
+  onViewDetail,
+}: StreamingMessageProps) {
   const hasText = text.trim().length > 0;
 
   return (
@@ -27,7 +31,9 @@ export function StreamingMessage({ text, startedAt, onViewDetail }: StreamingMes
       <div className="flex flex-col gap-1 max-w-[80%] items-start">
         {/* Role label */}
         <div className="flex items-center gap-2 px-1">
-          <span className="text-xs font-medium text-muted-foreground">Assistant</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            Assistant
+          </span>
           <span className="text-xs text-accent">Typing…</span>
         </div>
 
@@ -39,7 +45,13 @@ export function StreamingMessage({ text, startedAt, onViewDetail }: StreamingMes
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
                 components={{
-                  code: ({ node, inline, className, children, ...props }: any) => (
+                  code: ({
+                    node,
+                    inline,
+                    className,
+                    children,
+                    ...props
+                  }: any) => (
                     <code
                       className={
                         inline
@@ -90,7 +102,9 @@ export function ReadingIndicator() {
       <div className="flex flex-col gap-1 max-w-[80%] items-start">
         {/* Role label */}
         <div className="flex items-center gap-2 px-1">
-          <span className="text-xs font-medium text-muted-foreground">Assistant</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            Assistant
+          </span>
           <span className="text-xs text-accent">Reading…</span>
         </div>
 

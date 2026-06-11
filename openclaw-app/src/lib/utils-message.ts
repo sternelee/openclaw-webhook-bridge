@@ -35,14 +35,17 @@ export function normalizeRoleForGrouping(role: string): string {
  * Check if a message is a tool result message based on its role.
  */
 export function isToolResultMessage(message: ChatMessage): boolean {
-  const role = typeof message.role === "string" ? message.role.toLowerCase() : "";
+  const role =
+    typeof message.role === "string" ? message.role.toLowerCase() : "";
   return role === "toolresult" || role === "tool_result";
 }
 
 /**
  * Normalize message content to a consistent structure.
  */
-export function normalizeMessageContent(content: string | MessageContentItem[] | undefined): MessageContentItem[] {
+export function normalizeMessageContent(
+  content: string | MessageContentItem[] | undefined,
+): MessageContentItem[] {
   if (!content) {
     return [];
   }
@@ -108,7 +111,11 @@ export function extractThinking(message: ChatMessage): string | null {
     return null;
   }
 
-  const matches = [...text.matchAll(/<\s*think(?:ing)?\s*>([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/gi)];
+  const matches = [
+    ...text.matchAll(
+      /<\s*think(?:ing)?\s*>([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/gi,
+    ),
+  ];
   const extracted = matches.map((m) => (m[1] ?? "").trim()).filter(Boolean);
   return extracted.length > 0 ? extracted.join("\n") : null;
 }
@@ -133,13 +140,17 @@ export function formatReasoningMarkdown(text: string): string {
  * Strip thinking tags from text (for assistant messages).
  */
 export function stripThinkingTags(text: string): string {
-  return text.replace(/<\s*think(?:ing)?\s*>[\s\S]*?<\s*\/\s*think(?:ing)?\s*>/gi, "").trim();
+  return text
+    .replace(/<\s*think(?:ing)?\s*>[\s\S]*?<\s*\/\s*think(?:ing)?\s*>/gi, "")
+    .trim();
 }
 
 /**
  * Extract images from message content.
  */
-export function extractImages(message: ChatMessage): Array<{ url: string; alt?: string }> {
+export function extractImages(
+  message: ChatMessage,
+): Array<{ url: string; alt?: string }> {
   const images: Array<{ url: string; alt?: string }> = [];
   const content = normalizeMessageContent(message.content);
 
@@ -216,7 +227,11 @@ export function groupMessagesByRole(messages: ChatMessage[]): Array<{
     const timestamp = message.timestamp || Date.now();
     const isStreaming = message.status === "streaming";
 
-    if (groups.length === 0 || normalizeRoleForGrouping(groups[groups.length - 1].role) !== normalizedRole) {
+    if (
+      groups.length === 0 ||
+      normalizeRoleForGrouping(groups[groups.length - 1].role) !==
+        normalizedRole
+    ) {
       groups.push({
         role: normalizedRole,
         messages: [message],
@@ -239,13 +254,14 @@ export function groupMessagesByRole(messages: ChatMessage[]): Array<{
 export function messageToMarkdown(message: ChatMessage): string {
   const { role, content, timestamp } = message;
 
-  const roleLabel = {
-    user: "**You**",
-    assistant: "**Assistant**",
-    system: "**System**",
-    tool: "**Tool**",
-    tool_result: "**Tool Result**",
-  }[role] || `**${role}**`;
+  const roleLabel =
+    {
+      user: "**You**",
+      assistant: "**Assistant**",
+      system: "**System**",
+      tool: "**Tool**",
+      tool_result: "**Tool Result**",
+    }[role] || `**${role}**`;
 
   const date = timestamp ? new Date(timestamp).toLocaleString() : "";
   const text = extractText(message);
